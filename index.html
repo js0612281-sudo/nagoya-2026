@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>名古屋親子旅帳 | Nagoya Trip</title>
+    
+    <!-- Vue 3 (Global) -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+    <!-- Markdown Parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+        import { getFirestore, collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+        window.firebaseModules = { 
+            initializeApp, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, 
+            getFirestore, collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, setDoc, getDoc 
+        };
+    </script>
+
+    <style>
+        body {
+            font-family: 'Noto Sans TC', 'Noto Sans JP', sans-serif;
+            background-color: #FDFCF8; /* 和紙白 */
+            color: #433D3C; /* 墨黑 */
+            overflow: hidden; /* 防止整個頁面捲動，只捲動內容區 */
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .bg-sidebar { background-color: #F4F1EA; } 
+        .bg-active { background-color: #4B9CD3; color: white; } /* 改為適合名古屋/海邊的藍色系 */
+        .text-accent { color: #2C5282; } 
+        .bg-card { background-color: #FFFFFF; }
+        .border-soft { border-color: #EDE9E0; }
+        .prose-tips p { margin-bottom: 0.5em; line-height: 1.6; }
+        .prose-tips ul { list-style-type: disc; padding-left: 1.2em; margin-bottom: 0.5em; }
+        .prose-tips strong { color: #4B9CD3; font-weight: 700; }
+        .prose-tips li { margin-bottom: 0.3em; }
+        
+        /* 📱 手機底部安全區域修正 */
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom, 20px);
+        }
+    </style>
+</head>
+<body>
+
+<!-- 修正高度為 100dvh 以適應手機瀏覽器 -->
+<div id="app" class="flex h-[100dvh] w-full max-w-md mx-auto shadow-2xl relative overflow-hidden bg-[#FDFCF8]">
+
+    <!-- 左側導航欄 -->
+    <nav class="w-[80px] bg-sidebar flex flex-col items-center py-6 border-r border-soft h-full overflow-y-auto no-scrollbar z-20 flex-shrink-0">
+        <!-- 倒數計時 -->
+        <div class="mb-4 flex flex-col items-center justify-center w-14 h-14 rounded-full bg-[#433D3C] text-white shadow-lg relative overflow-hidden group cursor-default">
+            <div class="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <span class="text-[8px] opacity-70 mb-0.5">距離出發</span>
+            <div class="flex items-baseline"><span class="text-sm font-bold font-mono leading-none">{{ daysRemaining }}</span><span class="text-[8px] ml-[1px]">天</span></div>
+        </div>
+
+        <!-- 記帳助手按鈕 (置頂) -->
+        <div class="w-full px-2 mb-4 border-b border-gray-200 pb-4 flex flex-col items-center">
+            <button @click="currentView = 'expense'" 
+                class="flex flex-col items-center justify-center w-14 py-3 rounded-xl transition-all shadow-sm"
+                :class="currentView === 'expense' ? 'bg-[#4B9CD3] text-white shadow-md scale-105' : 'bg-white border border-gray-100 text-gray-600 hover:bg-gray-50'">
+                <i data-lucide="wallet" class="w-6 h-6 mb-1"></i>
+                <span class="text-[10px] font-bold">記帳</span>
+            </button>
+        </div>
+
+        <!-- 天數選單 -->
+        <div class="flex-1 w-full space-y-3 flex flex-col items-center overflow-y-auto no-scrollbar pb-4">
+            <button v-for="(day, index) in itinerary" :key="index" @click="switchDay(index)" class="flex flex-col items-center justify-center w-12 py-2 rounded-xl transition-all duration-300" :class="currentView === 'itinerary' && activeDayIndex === index ? 'bg-active shadow-md transform scale-105' : 'text-gray-400 hover:bg-white/50'">
+                <i :data-lucide="getDayIcon(index)" class="w-5 h-5 mb-1"></i><span class="text-[10px] font-bold">Day {{ index + 1 }}</span><span class="text-[8px] font-mono opacity-80">{{ day.shortDate }}</span>
+            </button>
+            <div class="flex flex-col gap-2 mt-2 border-t border-gray-200 pt-2 w-full items-center">
+                <button @click="addNewDay" class="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-gray-300 text-gray-400 hover:border-[#4B9CD3] hover:text-[#4B9CD3] hover:bg-white transition-all" title="新增天數"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                <button v-if="itinerary.length > 1" @click="removeLastDay" class="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-gray-300 text-gray-400 hover:border-red-400 hover:text-red-400 hover:bg-white transition-all" title="刪除最後一天"><i data-lucide="minus" class="w-4 h-4"></i></button>
+            </div>
+        </div>
+
+        <!-- 底部功能鍵 (增加 pb-safe 安全距離) -->
+        <div class="mt-auto w-full flex flex-col items-center space-y-3 border-t border-gray-200 pt-4 pb-safe bg-sidebar z-30">
+            <button @click="currentView = 'settings'" class="flex flex-col items-center justify-center w-12 py-2 rounded-xl transition-all" :class="currentView === 'settings' ? 'bg-gray-200 text-gray-600' : 'text-gray-400'"><i data-lucide="settings" class="w-5 h-5 mb-1"></i><span class="text-[9px]">設定</span></button>
+            <button @click="currentView = 'emergency'" class="flex flex-col items-center justify-center w-12 py-2 rounded-xl transition-all" :class="currentView === 'emergency' ? 'bg-red-50 text-red-500 border border-red-100' : 'text-gray-400'"><i data-lucide="siren" class="w-5 h-5 mb-1"></i><span class="text-[9px]">求助</span></button>
+        </div>
+    </nav>
+
+    <!-- 右側主要內容區 -->
+    <main class="flex-1 h-full overflow-y-auto no-scrollbar bg-[#FDFCF8] relative">
+        
+        <!-- VIEW: 行程表 -->
+        <div v-if="currentView === 'itinerary'" class="min-h-full pb-safe">
+            <div class="px-6 pt-8 pb-4">
+                <div class="flex justify-between items-center mb-3">
+                    <div class="inline-block bg-[#4B9CD3] text-white text-[10px] font-bold px-3 py-1 rounded-full tracking-wider shadow-sm">DAY {{ activeDayIndex + 1 }} • {{ currentDayData.date }}</div>
+                    <span v-if="dbConnected" class="text-[9px] text-green-600 bg-green-50 px-2 py-1 rounded-full flex items-center gap-1"><i data-lucide="cloud" class="w-3 h-3"></i> 已同步</span>
+                </div>
+                
+                <!-- 可編輯標題與描述 -->
+                <div v-if="!isEditingTitle">
+                    <h1 class="text-2xl font-bold text-[#433D3C] leading-tight mb-2" @click="startEditTitle">{{ currentDayData.title }}</h1>
+                    <p class="text-xs text-gray-500 leading-relaxed mb-4" @click="startEditTitle">{{ currentDayData.desc }}</p>
+                </div>
+                <div v-else class="mb-4 space-y-2 animate-in fade-in">
+                    <input v-model="tempTitle.title" class="w-full text-xl font-bold bg-gray-50 border rounded px-2 py-1">
+                    <textarea v-model="tempTitle.desc" class="w-full text-xs bg-gray-50 border rounded px-2 py-1" rows="2"></textarea>
+                    <div class="flex gap-2"><button @click="isEditingTitle = false" class="text-xs bg-gray-100 px-3 py-1 rounded">取消</button><button @click="saveTitle" class="text-xs bg-[#4B9CD3] text-white px-3 py-1 rounded font-bold">儲存</button></div>
+                </div>
+
+                <div class="flex flex-wrap gap-2 mb-4">
+                    <span v-for="tag in currentDayData.tags" :key="tag" class="flex items-center gap-1 bg-blue-50 text-[#2C5282] px-2 py-1 rounded-lg text-[10px] font-bold border border-[#4B9CD3]/30"><i data-lucide="thumbs-up" class="w-3 h-3"></i> {{ tag }}</span>
+                </div>
+
+                <!-- 導遊小撇步 (手動編輯版) -->
+                <div class="bg-[#433D3C] text-white p-4 rounded-2xl shadow-lg mb-6 relative overflow-hidden group min-h-[100px] transition-all duration-300">
+                    <div class="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-bl-full pointer-events-none"></div>
+                    <div class="flex justify-between items-start relative z-10 mb-2">
+                        <div class="flex items-center gap-2"><i data-lucide="lightbulb" class="w-4 h-4 text-[#4B9CD3]"></i><h4 class="text-xs font-bold text-[#4B9CD3]">行程重點提醒</h4></div>
+                        <button v-if="!isEditingTip" @click="startEditTip" class="p-1 text-white/30 hover:text-white/90 hover:bg-white/10 rounded-full transition-all"><i data-lucide="pencil" class="w-3 h-3"></i></button>
+                    </div>
+                    <div class="relative z-10 pl-6 border-l-2 border-[#4B9CD3]/30 ml-2">
+                        <div v-if="!isEditingTip" class="text-xs opacity-90 leading-relaxed prose-tips" v-html="parsedTips"></div>
+                        <div v-else class="animate-in fade-in duration-200">
+                            <textarea v-model="tempTip" rows="5" class="w-full bg-black/20 text-white text-xs p-2 rounded-lg border border-white/20 focus:border-[#4B9CD3] outline-none mb-2 leading-relaxed" placeholder="寫點什麼提醒自己吧..."></textarea>
+                            <div class="flex gap-2 justify-end"><button @click="isEditingTip = false" class="px-3 py-1 text-[10px] text-gray-400 hover:text-white">取消</button><button @click="saveTip" class="px-3 py-1 bg-[#4B9CD3] text-[#433D3C] text-[10px] font-bold rounded-full hover:bg-white transition-colors">儲存</button></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 天氣卡片 -->
+                <div class="bg-white border border-gray-100 p-4 rounded-2xl shadow-sm mb-2 relative overflow-hidden transition-all duration-300">
+                    <div class="flex justify-between items-center mb-3 relative z-10">
+                        <span class="text-xs font-bold text-gray-600 flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3"></i> {{ currentDayData.location }}</span>
+                        <span v-if="weatherState.status === 'loading'" class="text-[9px] bg-gray-100 text-gray-400 px-2 py-1 rounded-full flex items-center gap-1"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 讀取中</span>
+                        <span v-else-if="weatherState.status === 'too_early'" class="text-[9px] bg-gray-100 text-gray-400 px-2 py-1 rounded-full">尚無預報資料</span>
+                        <span v-else class="text-[9px] bg-green-50 text-green-600 px-2 py-1 rounded-full border border-green-100 flex items-center gap-1"><i data-lucide="check-circle" class="w-3 h-3"></i> 氣象預報</span>
+                    </div>
+                    <div v-if="weatherState.status === 'available'" class="flex justify-between items-center text-center relative z-10 animate-in fade-in">
+                        <div class="flex flex-col items-center"><span class="text-[10px] text-gray-400">最低</span><i data-lucide="thermometer" class="w-5 h-5 text-blue-300 my-1"></i><span class="text-xs font-bold">{{ weatherState.data.min }}°</span></div>
+                        <div class="w-[1px] h-6 bg-gray-100"></div>
+                        <div class="flex flex-col items-center"><span class="text-[10px] text-gray-400">天氣</span><i :data-lucide="getWeatherIcon(weatherState.data.code)" class="w-6 h-6 text-[#4B9CD3] my-1"></i><span class="text-xs font-bold">{{ weatherState.data.max }}° / {{ weatherState.data.min }}°</span></div>
+                        <div class="w-[1px] h-6 bg-gray-100"></div>
+                        <div class="flex flex-col items-center"><span class="text-[10px] text-gray-400">最高</span><i data-lucide="sun" class="w-5 h-5 text-orange-300 my-1"></i><span class="text-xs font-bold">{{ weatherState.data.max }}°</span></div>
+                    </div>
+                    <div v-else class="flex flex-col items-center justify-center py-4 text-gray-300 gap-2"><i data-lucide="calendar-clock" class="w-8 h-8 opacity-50"></i><span class="text-[10px]">距離出發日期較遠，暫無準確預報</span></div>
+                </div>
+            </div>
+
+            <!-- 時間軸列表 (含事件編輯) -->
+            <div class="px-4 pb-20">
+                <div class="relative pl-4 border-l-2 border-dashed border-gray-200 ml-2 space-y-6">
+                    <div v-for="(event, eIdx) in currentDayData.events" :key="event.id" class="relative pl-6 group">
+                        <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 border-[#FDFCF8] shadow-sm flex items-center justify-center bg-[#4B9CD3]"></div>
+                        
+                        <!-- 顯示模式 -->
+                        <div v-if="editingEventId !== event.id">
+                            <div class="text-xs font-mono font-bold text-[#4B9CD3] mb-1">{{ event.time }}</div>
+                            <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow relative">
+                                <h3 class="font-bold text-gray-800 text-sm mb-1">{{ event.title }}</h3>
+                                <p class="text-xs text-gray-500 mb-3">{{ event.sub }}</p>
+                                <div class="flex gap-2 flex-wrap">
+                                    <a v-if="event.mapUrl" :href="event.mapUrl" target="_blank" class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-gray-800 text-white text-[10px] font-medium active:scale-95 transition-transform"><i data-lucide="navigation" class="w-3 h-3"></i> 導航</a>
+                                    <a v-else :href="`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.title + ' ' + event.sub)}`" target="_blank" class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-gray-800 text-white text-[10px] font-medium active:scale-95 transition-transform"><i data-lucide="navigation" class="w-3 h-3"></i> 導航</a>
+                                    <button v-if="event.link" class="flex items-center gap-1 px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 text-[10px] font-medium hover:bg-gray-50"><i data-lucide="external-link" class="w-3 h-3"></i> 官網</button>
+                                    <button v-if="event.ticket" class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#4B9CD3]/20 text-[#2C5282] text-[10px] font-medium"><i data-lucide="ticket" class="w-3 h-3"></i> 憑證</button>
+                                </div>
+                                <div class="absolute top-2 right-2 flex gap-1">
+                                    <button @click="startEditEvent(event)" class="text-gray-300 hover:text-blue-400 p-1"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                                    <button @click="deleteEvent(eIdx)" class="text-gray-300 hover:text-red-400 p-1"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 編輯模式 -->
+                        <div v-else class="bg-white rounded-xl p-3 shadow-md border border-[#4B9CD3] animate-in fade-in">
+                            <div class="space-y-2">
+                                <div class="flex gap-2">
+                                    <input v-model="tempEvent.time" class="w-1/3 bg-gray-50 border rounded px-2 py-1 text-xs" placeholder="時間">
+                                    <input v-model="tempEvent.title" class="w-2/3 bg-gray-50 border rounded px-2 py-1 text-xs font-bold" placeholder="標題">
+                                </div>
+                                <input v-model="tempEvent.sub" class="w-full bg-gray-50 border rounded px-2 py-1 text-xs" placeholder="地點/描述">
+                                <input v-model="tempEvent.mapUrl" class="w-full bg-gray-50 border rounded px-2 py-1 text-[10px]" placeholder="Google Maps 連結 (選填)">
+                                <div class="flex gap-2 text-[10px] text-gray-500">
+                                    <label class="flex items-center gap-1"><input type="checkbox" v-model="tempEvent.link"> 官網</label>
+                                    <label class="flex items-center gap-1"><input type="checkbox" v-model="tempEvent.ticket"> 憑證</label>
+                                </div>
+                                <div class="flex gap-2 pt-1">
+                                    <button @click="cancelEditEvent" class="flex-1 py-1.5 bg-gray-100 text-gray-500 rounded text-xs">取消</button>
+                                    <button @click="saveEditEvent(eIdx)" class="flex-1 py-1.5 bg-[#4B9CD3] text-white rounded text-xs font-bold">完成</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <button @click="addNewEvent" class="ml-6 w-[calc(100%-1.5rem)] py-3 border border-dashed border-gray-300 rounded-xl text-gray-400 text-xs hover:border-[#4B9CD3] hover:text-[#4B9CD3] transition-colors flex items-center justify-center gap-2"><i data-lucide="plus" class="w-3 h-3"></i> 新增行程</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: 記帳助手 (雲端同步) -->
+        <div v-if="currentView === 'expense'" class="h-full bg-[#FDFCF8] p-6 overflow-y-auto pb-safe">
+            <div class="flex justify-between items-center mb-1">
+                <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2"><i data-lucide="wallet" class="w-6 h-6 text-[#4B9CD3]"></i> 記帳助手</h2>
+                <div class="flex gap-2">
+                    <span v-if="!dbConnected" class="text-[10px] text-gray-400 bg-gray-100 px-2 py-1 rounded-full flex items-center gap-1" title="請設定 Firebase 以啟用雲端功能"><i data-lucide="hard-drive" class="w-3 h-3"></i> 本機</span>
+                    <span v-else class="text-[10px] text-green-600 bg-green-50 px-2 py-1 rounded-full flex items-center gap-1"><i data-lucide="cloud" class="w-3 h-3"></i> 同步中</span>
+                    <button @click="showSettlement" class="bg-gray-800 text-white text-[10px] px-3 py-1.5 rounded-full font-bold flex items-center gap-1 shadow-md active:scale-95 transition-transform">
+                        <i data-lucide="calculator" class="w-3 h-3"></i> 結算
+                    </button>
+                </div>
+            </div>
+            <div class="flex items-center gap-1 mb-6">
+                <p class="text-xs text-gray-400 font-mono">1 JPY ≈ {{ exchangeRate }} TWD</p>
+                <span v-if="isRateLoading" class="text-[10px] text-gray-300 animate-pulse">(更新中...)</span>
+            </div>
+
+            <!-- 總花費 -->
+            <div class="bg-[#4B9CD3] rounded-3xl p-6 text-center shadow-lg shadow-blue-100 mb-8 relative overflow-hidden text-white">
+                <div class="absolute -right-6 -top-6 w-24 h-24 bg-white opacity-20 rounded-full"></div>
+                <div class="absolute -left-6 -bottom-6 w-20 h-20 bg-white opacity-20 rounded-full"></div>
+                <div class="grid grid-cols-2 gap-4 relative z-10">
+                    <div class="text-center border-r border-white/20"><p class="text-[10px] font-bold text-blue-100 uppercase tracking-widest mb-1 opacity-80">日幣支出</p><h3 class="text-xl font-bold tracking-tight font-mono">¥{{ totalRealJPY.toLocaleString() }}</h3></div>
+                    <div class="text-center"><p class="text-[10px] font-bold text-blue-100 uppercase tracking-widest mb-1 opacity-80">台幣支出</p><h3 class="text-xl font-bold tracking-tight font-mono">NT${{ totalRealTWD.toLocaleString() }}</h3></div>
+                </div>
+                <div class="mt-4 pt-4 border-t border-white/20 relative z-10"><div class="inline-block bg-black/10 px-3 py-1 rounded-full text-white/90 text-xs font-mono">總計折合約 NT$ {{ grandTotalInTWD.toLocaleString() }}</div></div>
+            </div>
+
+            <!-- 輸入區塊 -->
+            <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+                <input v-model="newExpense.title" placeholder="品項 (如: 鰻魚飯)" class="w-full bg-gray-50 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#4B9CD3] outline-none">
+                <div class="flex gap-2">
+                    <div class="flex bg-gray-100 rounded-xl p-1 flex-shrink-0">
+                        <button @click="newExpense.currency = 'JPY'" class="px-3 py-2 rounded-lg text-xs font-bold transition-all" :class="newExpense.currency === 'JPY' ? 'bg-white text-[#4B9CD3] shadow-sm' : 'text-gray-400'">¥</button>
+                        <button @click="newExpense.currency = 'TWD'" class="px-3 py-2 rounded-lg text-xs font-bold transition-all" :class="newExpense.currency === 'TWD' ? 'bg-white text-[#4B9CD3] shadow-sm' : 'text-gray-400'">NT$</button>
+                    </div>
+                    <input v-model="newExpense.amount" type="number" placeholder="金額" class="flex-1 bg-gray-50 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#4B9CD3] outline-none font-mono">
+                </div>
+                <div class="bg-gray-50 rounded-xl p-3 space-y-3">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold text-gray-500 w-16">誰先付錢</span>
+                        <select v-model="newExpense.payer" class="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 outline-none flex-1"><option v-for="member in members" :key="member" :value="member">{{ member }}</option><option value="公費">公費支出</option></select>
+                    </div>
+                    <div class="flex items-start gap-2">
+                        <span class="text-xs font-bold text-gray-500 w-16 mt-1.5">分給誰</span>
+                        <div class="flex-1 flex flex-wrap gap-2">
+                            <button @click="toggleAllSplitters(newExpense)" class="px-2 py-1 rounded-md text-[10px] border transition-colors" :class="newExpense.splitters.length === members.length ? 'bg-[#4B9CD3] text-white border-[#4B9CD3]' : 'bg-white text-gray-400 border-gray-200'">全選</button>
+                            <button v-for="member in members" :key="member" @click="toggleSplitter(newExpense, member)" class="px-2 py-1 rounded-md text-[10px] border transition-colors" :class="newExpense.splitters.includes(member) ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-500 border-gray-200'">{{ member }}</button>
+                        </div>
+                    </div>
+                </div>
+                <button @click="addExpense" class="w-full bg-[#433D3C] text-[#4B9CD3] font-bold py-3 rounded-xl text-sm shadow-md hover:bg-black transition-colors">新增紀錄</button>
+            </div>
+
+            <!-- 列表 -->
+            <div class="mt-6 space-y-3 pb-20">
+                <h4 class="text-xs font-bold text-gray-400 pl-1">近期支出</h4>
+                <div v-if="expenses.length === 0" class="text-center text-gray-300 text-xs py-4">目前沒有紀錄</div>
+                <div v-for="ex in expenses" :key="ex.id" class="bg-white p-4 rounded-xl border border-gray-50 transition-all">
+                    <div v-if="editingExpenseId !== ex.id" class="flex justify-between items-center group">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs text-gray-500 font-bold flex-shrink-0">{{ ex.payer[0] }}</div>
+                            <div>
+                                <div class="text-sm font-bold text-gray-800">{{ ex.title }}</div>
+                                <div class="text-[10px] text-gray-400 flex flex-col"><span>{{ ex.date }} • {{ ex.payer }} 先付</span><span class="text-gray-300 text-[9px] mt-0.5" v-if="ex.splitters && ex.splitters.length < members.length">分給: {{ ex.splitters.join(', ') }}</span></div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="text-right"><div class="text-sm font-bold text-gray-800 font-mono">{{ ex.currency === 'JPY' ? '¥' : 'NT$' }} {{ Number(ex.amount).toLocaleString() }}</div></div>
+                            <div class="flex flex-col gap-1"><button @click="startEditExpense(ex)" class="text-gray-300 hover:text-blue-500"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i></button><button @click="deleteExpense(ex.id)" class="text-gray-300 hover:text-red-500"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></div>
+                        </div>
+                    </div>
+                    <!-- 支出編輯模式 -->
+                    <div v-else class="space-y-3">
+                        <div class="flex justify-between items-center mb-2"><span class="text-xs font-bold text-[#4B9CD3]">編輯支出</span></div>
+                        <input v-model="tempExpense.title" class="w-full bg-gray-50 border-none rounded-lg px-3 py-2 text-xs" placeholder="品項">
+                        <div class="flex gap-2"><div class="flex bg-gray-100 rounded-lg p-0.5"><button @click="tempExpense.currency = 'JPY'" class="px-2 py-1.5 rounded-md text-[10px] font-bold" :class="tempExpense.currency === 'JPY' ? 'bg-white text-[#4B9CD3]' : 'text-gray-400'">¥</button><button @click="tempExpense.currency = 'TWD'" class="px-2 py-1.5 rounded-md text-[10px] font-bold" :class="tempExpense.currency === 'TWD' ? 'bg-white text-[#4B9CD3]' : 'text-gray-400'">NT$</button></div><input v-model="tempExpense.amount" class="flex-1 bg-gray-50 border-none rounded-lg px-3 py-2 text-xs font-mono"></div>
+                        <div class="flex gap-2">
+                            <select v-model="tempExpense.payer" class="bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-600 outline-none flex-1"><option v-for="member in members" :key="member" :value="member">{{ member }}</option><option value="公費">公費支出</option></select>
+                            <div class="flex gap-1"><button @click="cancelEditExpense" class="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-lg text-xs font-bold">取消</button><button @click="saveEditExpense" class="px-3 py-1.5 bg-[#433D3C] text-[#4B9CD3] rounded-lg text-xs font-bold">儲存</button></div>
+                        </div>
+                        <div class="flex items-start gap-2 bg-gray-50 p-2 rounded-lg"><span class="text-[10px] font-bold text-gray-500 w-10 mt-1">分攤</span><div class="flex-1 flex flex-wrap gap-1"><button @click="toggleAllSplitters(tempExpense)" class="px-2 py-0.5 rounded text-[10px] border" :class="tempExpense.splitters.length === members.length ? 'bg-[#4B9CD3] text-white' : 'bg-white text-gray-400'">全</button><button v-for="m in members" :key="m" @click="toggleSplitter(tempExpense, m)" class="px-2 py-0.5 rounded text-[10px] border" :class="tempExpense.splitters.includes(m) ? 'bg-gray-700 text-white' : 'bg-white text-gray-500'">{{ m }}</button></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: 設定 (Rate Only) -->
+        <div v-if="currentView === 'settings'" class="h-full bg-[#FDFCF8] p-6 overflow-y-auto">
+            <h2 class="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                <i data-lucide="settings" class="w-6 h-6 text-[#4B9CD3]"></i> 設定
+            </h2>
+            <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                <h3 class="text-sm font-bold text-gray-700 mb-2">匯率設定</h3>
+                <div class="flex items-center gap-3">
+                    <span class="text-xs text-gray-500">1 JPY = </span>
+                    <input type="number" v-model="exchangeRate" step="0.001" class="w-24 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-center outline-none focus:border-[#4B9CD3]">
+                    <span class="text-xs text-gray-500">TWD</span>
+                </div>
+                <button @click="fetchExchangeRate" class="mt-2 text-[10px] text-blue-500 underline flex items-center gap-1"><i data-lucide="refresh-cw" class="w-3 h-3" :class="{'animate-spin': isRateLoading}"></i> 抓取即時匯率</button>
+            </div>
+            <p v-if="dbConnected" class="text-[10px] text-green-500 mt-4 flex items-center gap-1 justify-center"><i data-lucide="check" class="w-3 h-3"></i> Firebase 連線正常 (Nagoya 2026)</p>
+        </div>
+
+        <!-- Settlement Modal -->
+        <div v-if="showSettlementModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="showSettlementModal = false"></div>
+            <div class="bg-white w-full max-w-sm rounded-3xl p-6 relative z-10 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+                <button @click="showSettlementModal = false" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+                <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2"><i data-lucide="calculator" class="w-5 h-5 text-[#4B9CD3]"></i> 雙幣結算報告</h3>
+                <div class="space-y-4 mb-6">
+                    <div v-for="stat in settlementStats" :key="stat.name" class="flex flex-col text-xs border-b border-gray-50 pb-2">
+                        <div class="flex justify-between items-center mb-1"><span class="font-bold text-gray-800 text-sm">{{ stat.name }}</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">日幣淨額</span><span class="font-mono font-bold" :class="stat.netJPY >= 0 ? 'text-green-500' : 'text-red-500'">{{ stat.netJPY >= 0 ? '收' : '付' }} ¥{{ Math.abs(stat.netJPY).toLocaleString() }}</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">台幣淨額</span><span class="font-mono font-bold" :class="stat.netTWD >= 0 ? 'text-green-500' : 'text-red-500'">{{ stat.netTWD >= 0 ? '收' : '付' }} ${{ Math.abs(stat.netTWD).toLocaleString() }}</span></div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 rounded-2xl p-4 mb-3"><h4 class="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider flex items-center gap-1"><i data-lucide="coins" class="w-3 h-3"></i> 日幣轉帳建議</h4><div v-if="transfersJPY.length === 0" class="text-center text-gray-400 text-xs py-1">無日幣帳款</div><div v-else class="space-y-2"><div v-for="(transfer, idx) in transfersJPY" :key="idx" class="flex items-center justify-between bg-white p-2 rounded-lg border border-gray-100 shadow-sm"><div class="flex items-center gap-2"><span class="font-bold text-gray-800 text-xs">{{ transfer.from }}</span><i data-lucide="arrow-right" class="w-3 h-3 text-gray-300"></i><span class="font-bold text-gray-800 text-xs">{{ transfer.to }}</span></div><span class="font-mono font-bold text-[#4B9CD3] text-xs">¥{{ transfer.amount.toLocaleString() }}</span></div></div></div>
+                <div class="bg-gray-50 rounded-2xl p-4"><h4 class="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider flex items-center gap-1"><i data-lucide="banknote" class="w-3 h-3"></i> 台幣轉帳建議</h4><div v-if="transfersTWD.length === 0" class="text-center text-gray-400 text-xs py-1">無台幣帳款</div><div v-else class="space-y-2"><div v-for="(transfer, idx) in transfersTWD" :key="idx" class="flex items-center justify-between bg-white p-2 rounded-lg border border-gray-100 shadow-sm"><div class="flex items-center gap-2"><span class="font-bold text-gray-800 text-xs">{{ transfer.from }}</span><i data-lucide="arrow-right" class="w-3 h-3 text-gray-300"></i><span class="font-bold text-gray-800 text-xs">{{ transfer.to }}</span></div><span class="font-mono font-bold text-[#4B9CD3] text-xs">${{ transfer.amount.toLocaleString() }}</span></div></div></div>
+                <button @click="showSettlementModal = false" class="w-full mt-6 bg-[#433D3C] text-white py-3 rounded-xl font-bold text-sm">關閉</button>
+            </div>
+        </div>
+
+        <!-- VIEW: 緊急求助 -->
+        <div v-if="currentView === 'emergency'" class="h-full bg-[#433D3C] text-white p-6 overflow-y-auto">
+             <h2 class="text-2xl font-bold mb-2 flex items-center gap-2 text-red-400">
+                <i data-lucide="plus-square" class="w-6 h-6"></i> 緊急求助
+            </h2>
+            <div class="space-y-4">
+                <a href="tel:110" class="block bg-red-900/30 border border-red-900/50 p-5 rounded-2xl flex items-center justify-between active:scale-95 transition-transform">
+                    <div>
+                        <h3 class="text-lg font-bold text-red-400 mb-1">警察局</h3>
+                        <p class="text-xs text-red-200/60">犯罪、事故、遺失物品</p>
+                    </div>
+                    <div class="bg-red-500 text-white px-5 py-2 rounded-full font-bold flex items-center gap-2 shadow-lg shadow-red-900/50">
+                        <i data-lucide="phone" class="w-4 h-4"></i> 110
+                    </div>
+                </a>
+                <a href="tel:119" class="block bg-orange-900/30 border border-orange-900/50 p-5 rounded-2xl flex items-center justify-between active:scale-95 transition-transform">
+                    <div>
+                        <h3 class="text-lg font-bold text-orange-400 mb-1">救護車 / 消防</h3>
+                        <p class="text-xs text-orange-200/60">受傷、急病、火災</p>
+                    </div>
+                    <div class="bg-orange-500 text-white px-5 py-2 rounded-full font-bold flex items-center gap-2 shadow-lg shadow-orange-900/50">
+                        <i data-lucide="phone" class="w-4 h-4"></i> 119
+                    </div>
+                </a>
+                <a href="tel:+81661201001" class="block bg-blue-900/30 border border-blue-900/50 p-5 rounded-2xl flex items-center justify-between active:scale-95 transition-transform">
+                    <div>
+                        <h3 class="text-lg font-bold text-blue-400 mb-1">台北駐大阪辦事處</h3>
+                        <p class="text-xs text-blue-200/60">護照遺失、急難救助</p>
+                    </div>
+                    <div class="bg-blue-500 text-white px-5 py-2 rounded-full font-bold flex items-center gap-2 shadow-lg shadow-blue-900/50">
+                        <i data-lucide="phone" class="w-4 h-4"></i> 撥打
+                    </div>
+                </a>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script type="module">
+    const { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, getFirestore, collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, setDoc, getDoc } = window.firebaseModules;
+    const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
+
+    createApp({
+        setup() {
+            const currentView = ref('itinerary');
+            const activeDayIndex = ref(0);
+            const exchangeRate = ref(0.22);
+            const isRateLoading = ref(false);
+            
+            // 編輯相關
+            const isEditingTip = ref(false);
+            const tempTip = ref('');
+            const editingEventId = ref(null);
+            const tempEvent = ref({});
+            const editingExpenseId = ref(null);
+            const tempExpense = ref({});
+            const isEditingTitle = ref(false);
+            const tempTitle = ref({title: '', desc: ''});
+
+            // 記帳與設定
+            const dbConnected = ref(false);
+            const showSettlementModal = ref(false);
+            const settlementStats = ref([]);
+            const transfersJPY = ref([]);
+            const transfersTWD = ref([]);
+            const weatherState = ref({ status: 'loading', data: null });
+
+            const members = ref(['品萱', 'OY', 'OY', 'OY', 'OY', '品萱', '品萱', 'RUBY', 'RUBY']);
+            const expenses = ref([]);
+            const newExpense = ref({ title: '', amount: '', payer: 'OY', currency: 'JPY', splitters: [...members.value] });
+
+            // 🔴 你的 Firebase Config (寫死在程式碼裡，方便大家使用)
+            const myFirebaseConfig = {
+                apiKey: "AIzaSyDPsTLpK7VaGgJoZk3_Kmqzjia-rOR5fNY",
+                authDomain: "hokkaido-trip-f44e9.firebaseapp.com",
+                projectId: "hokkaido-trip-f44e9",
+                storageBucket: "hokkaido-trip-f44e9.firebasestorage.app",
+                messagingSenderId: "592554790310",
+                appId: "1:592554790310:web:b50f36effd908a872d9367",
+                measurementId: "G-36BG8FB13C"
+            };
+
+            // 名古屋 2026 行程資料
+            const defaultItinerary = [
+                { 
+                    date: "1/7 (三)", shortDate: "1/7", title: "初見名古屋 & 購物日", 
+                    desc: "抵達中部國際機場，市區購物，入住溫馨民宿。", location: "名古屋", lat: 35.1815, lon: 136.9066, tags: ["寶可夢", "HARBS", "鰻魚飯"],
+                    tips: "⚠️ 機場出發約 40-50 分鐘。\n🛍️ Parco 有寶可夢中心和 HARBS 蛋糕。\n🏠 民宿地址：Yonchōda-801-10 Shippōchō Akitake, Ama, Aichi\n🍽️ 晚餐：あつた蓬莱軒(鰻魚飯) 或 矢場味噌豬排。",
+                    events: [
+                        { id: 1, time: "07:35", title: "抵達機場", sub: "11:03 降落 NGO", link: false, ticket: true },
+                        { id: 2, time: "12:30", title: "機場出發", sub: "包車前往市區", link: false, ticket: false },
+                        { id: 3, time: "13:20", title: "Nagoya PARCO", sub: "寶可夢/HARBS", link: true, ticket: false },
+                        { id: 4, time: "16:30", title: "前往民宿", sub: "包車移動", link: false, ticket: false },
+                        { id: 5, time: "17:10", title: "民宿 Check-in", sub: "Ama, Aichi", mapUrl: "https://maps.google.com/?q=Yonchōda-801-10+Shippōchō+Akitake", link: false, ticket: true }
+                    ]
+                },
+                { 
+                    date: "1/8 (四)", shortDate: "1/8", title: "龍貓與吉卜力的魔法", 
+                    desc: "吉卜力公園全日遊，進入夢幻動畫世界。", location: "長久手", lat: 35.1709, lon: 137.0867, tags: ["吉卜力", "龍貓", "親子"],
+                    tips: "🍃 吉卜力公園沒有遊樂設施，主要是場景還原。\n🍔 午餐：園區餐車或摩斯漢堡。\n🍽️ 晚餐：Steak House Asakuma (有自助吧，適合小孩)。",
+                    events: [
+                        { id: 6, time: "09:00", title: "民宿出發", sub: "前往吉卜力", link: false, ticket: false },
+                        { id: 7, time: "10:00", title: "吉卜力公園", sub: "Ghibli Park", link: true, ticket: true },
+                        { id: 8, time: "16:00", title: "返回市區", sub: "往餐廳移動", link: false, ticket: false },
+                        { id: 9, time: "17:00", title: "晚餐", sub: "Steak House Asakuma", link: true, ticket: false }
+                    ]
+                },
+                { 
+                    date: "1/9 (五)", shortDate: "1/9", title: "海洋世界 & 親子購物", 
+                    desc: "名古屋港水族館看虎鯨，下午 LaLaport 購物。", location: "名古屋港", lat: 35.0906, lon: 136.8781, tags: ["水族館", "虎鯨", "阿卡將"],
+                    tips: "🐬 必看海豚秀和虎鯨表演。\n🐟 午餐在漁港吃新鮮海鮮。\n🛍️ LaLaport 有阿卡將本舖(母嬰用品)和 Loft。",
+                    events: [
+                        { id: 10, time: "09:30", title: "民宿出發", sub: "前往水族館", link: false, ticket: false },
+                        { id: 11, time: "10:10", title: "名古屋港水族館", sub: "海豚秀/虎鯨", link: false, ticket: true },
+                        { id: 12, time: "12:30", title: "午餐", sub: "漁港", link: false, ticket: false },
+                        { id: 13, time: "13:45", title: "LaLaport", sub: "購物/晚餐", link: true, ticket: false }
+                    ]
+                },
+                { 
+                    date: "1/10 (六)", shortDate: "1/10", title: "樂高樂園瘋玩日", 
+                    desc: "LEGOLAND Japan 全日暢玩。", location: "金城ふ頭", lat: 35.0507, lon: 136.8436, tags: ["樂高", "遊樂園"],
+                    tips: "🧱 日本樂高樂園，適合 2-12 歲小孩。\n🍟 午餐在樂園內解決。",
+                    events: [
+                        { id: 14, time: "09:00", title: "民宿出發", sub: "前往樂高樂園", link: false, ticket: false },
+                        { id: 15, time: "09:30", title: "LEGOLAND", sub: "全日暢玩", link: true, ticket: true },
+                        { id: 16, time: "18:00", title: "晚餐", sub: "市區或民宿附近", link: false, ticket: false }
+                    ]
+                },
+                { 
+                    date: "1/11 (日)", shortDate: "1/11", title: "和服體驗 & 大須商店街", 
+                    desc: "全家穿和服拍照，逛大須觀音與商店街。", location: "大須", lat: 35.1598, lon: 136.9019, tags: ["和服", "大須", "飛騨牛"],
+                    tips: "👘 10:00 Vasara 名古屋車站店換和服。\n📸 大須觀音有巨型招財貓，適合拍照。\n🥩 晚餐預約：飛騨牛一頭家 馬喰一代 WEST。",
+                    events: [
+                        { id: 17, time: "09:00", title: "民宿出發", sub: "前往 Vasara", link: false, ticket: false },
+                        { id: 18, time: "10:00", title: "和服體驗", sub: "Vasara 名古屋站", link: true, ticket: true },
+                        { id: 19, time: "12:00", title: "大須商店街", sub: "逛街/午餐", link: true, ticket: false },
+                        { id: 20, time: "16:00", title: "歸還和服", sub: "車站採買", link: false, ticket: false },
+                        { id: 21, time: "18:00", title: "晚餐", sub: "馬喰一代 WEST", link: true, ticket: true }
+                    ]
+                },
+                { 
+                    date: "1/12 (一)", shortDate: "1/12", title: "快樂賦歸", 
+                    desc: "前往機場，最後採買，準備搭機。", location: "中部機場", lat: 34.8588, lon: 136.8146, tags: ["蝦餅", "波音787"], 
+                    tips: "🚐 08:30 準時 Check-out 發車。\n✈️ 建議 09:30-10:00 抵達機場。\n🦐 4樓藍天城買蝦餅之里 (えびせんべいの里)。\n🛫 12:05 起飛。",
+                    events: [
+                        { id: 22, time: "08:30", title: "民宿 Check-out", sub: "準時發車", link: false, ticket: false },
+                        { id: 23, time: "09:30", title: "抵達機場", sub: "辦理登機", link: false, ticket: true },
+                        { id: 24, time: "10:30", title: "機場巡禮", sub: "蝦餅/波音787", link: false, ticket: false },
+                        { id: 25, time: "12:05", title: "起飛", sub: "回溫暖的家", link: false, ticket: true }
+                    ] 
+                }
+            ];
+            
+            const itinerary = ref([...defaultItinerary]); 
+
+            // Computed
+            const currentDayData = computed(() => itinerary.value[activeDayIndex.value]);
+            const totalRealJPY = computed(() => expenses.value.filter(e => e.currency === 'JPY').reduce((sum, e) => sum + Number(e.amount), 0));
+            const totalRealTWD = computed(() => expenses.value.filter(e => e.currency === 'TWD').reduce((sum, e) => sum + Number(e.amount), 0));
+            const grandTotalInTWD = computed(() => Math.round(totalRealTWD.value + totalRealJPY.value * exchangeRate.value));
+            const targetDate = new Date('2026-01-07'); // Set target date to Nagoya Trip start
+            const daysRemaining = computed(() => { const today = new Date(); return Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24)); });
+            const parsedTips = computed(() => marked.parse(currentDayData.value.tips || ''));
+
+            // Firebase Logic
+            let db;
+            // ⚠️ 這裡使用 'nagoya_2026' 作為文件 ID，確保不會讀取到舊的北海道資料
+            const collectionId = 'nagoya_2026'; 
+
+            const initFirebase = () => {
+                if (myFirebaseConfig.apiKey) {
+                    try {
+                        const app = initializeApp(myFirebaseConfig);
+                        const auth = getAuth(app);
+                        db = getFirestore(app);
+
+                        signInAnonymously(auth);
+                        onAuthStateChanged(auth, (user) => {
+                            if (user) {
+                                dbConnected.value = true;
+                                // 1. 監聽記帳 (使用獨立的 collection 以免混淆)
+                                onSnapshot(collection(db, 'expenses_nagoya'), (snap) => {
+                                    expenses.value = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt - a.createdAt);
+                                });
+                                // 2. 監聽行程
+                                onSnapshot(doc(db, 'plans', collectionId), (docSnap) => {
+                                    if (docSnap.exists()) {
+                                        itinerary.value = docSnap.data().days;
+                                    } else {
+                                        // 如果雲端沒資料 (第一次用)，把預設的名古屋資料寫上去
+                                        setDoc(doc(db, 'plans', collectionId), { days: defaultItinerary });
+                                    }
+                                });
+                            }
+                        });
+                    } catch (e) { console.error("Firebase Init Failed", e); alert("Firebase 連線失敗"); }
+                }
+            };
+            
+            // Sync Itinerary to Firebase
+            const saveItinerary = () => {
+                if (dbConnected.value) {
+                    setDoc(doc(db, 'plans', collectionId), { days: itinerary.value });
+                }
+            };
+
+            // Events Handling
+            const switchDay = (i) => { currentView.value = 'itinerary'; activeDayIndex.value = i; isEditingTip.value = false; isEditingTitle.value = false; };
+            const getDayIcon = (i) => i === 0 || i === 5 ? 'plane' : (i === 1 || i === 4 ? 'camera' : (i === 3 ? 'gamepad-2' : 'map-pin'));
+            const getWeatherIcon = (w) => w === 'snow' ? 'snowflake' : (w === 'sun' ? 'sun' : 'cloud');
+            
+            // Edit Title/Desc
+            const startEditTitle = () => { tempTitle.value = {title: currentDayData.value.title, desc: currentDayData.value.desc}; isEditingTitle.value = true; };
+            const saveTitle = () => { 
+                itinerary.value[activeDayIndex.value].title = tempTitle.value.title; 
+                itinerary.value[activeDayIndex.value].desc = tempTitle.value.desc;
+                isEditingTitle.value = false;
+                saveItinerary();
+            };
+
+            // Edit Itinerary Event
+            const startEditEvent = (e) => { editingEventId.value = e.id; tempEvent.value = {...e}; };
+            const cancelEditEvent = () => { editingEventId.value = null; tempEvent.value = {}; };
+            const saveEditEvent = (idx) => { 
+                itinerary.value[activeDayIndex.value].events[idx] = {...tempEvent.value}; 
+                editingEventId.value = null; 
+                saveItinerary();
+            };
+            const addNewEvent = () => {
+                itinerary.value[activeDayIndex.value].events.push({ id: Date.now(), time: "12:00", title: "新行程", sub: "地點", link: false, ticket: false });
+                saveItinerary();
+            };
+            const deleteEvent = (idx) => { 
+                if(confirm("確定刪除？")) {
+                    itinerary.value[activeDayIndex.value].events.splice(idx, 1);
+                    saveItinerary();
+                }
+            };
+            
+            // Tips Editing
+            const startEditTip = () => { tempTip.value = currentDayData.value.tips; isEditingTip.value = true; };
+            const saveTip = () => { 
+                itinerary.value[activeDayIndex.value].tips = tempTip.value; 
+                isEditingTip.value = false; 
+                saveItinerary();
+            };
+
+            // Expense Logic
+            const addExpense = async () => {
+                if (!newExpense.value.title) return;
+                const data = { ...newExpense.value, amount: Number(newExpense.value.amount), date: new Date().toLocaleDateString('zh-TW'), createdAt: Date.now() };
+                if (dbConnected.value) await addDoc(collection(db, 'expenses_nagoya'), data);
+                else expenses.value.unshift({ id: Date.now(), ...data });
+                newExpense.value.title = ''; newExpense.value.amount = '';
+            };
+            const deleteExpense = async (id) => { if(confirm("確定刪除？")) dbConnected.value ? await deleteDoc(doc(db, 'expenses_nagoya', id)) : expenses.value = expenses.value.filter(e => e.id !== id); };
+            const startEditExpense = (ex) => { editingExpenseId.value = ex.id; tempExpense.value = JSON.parse(JSON.stringify(ex)); };
+            const saveEditExpense = async () => {
+                const { id, ...data } = tempExpense.value;
+                if (dbConnected.value) await updateDoc(doc(db, 'expenses_nagoya', id), data);
+                else { const idx = expenses.value.findIndex(e => e.id === id); if(idx !== -1) expenses.value[idx] = { id, ...data }; }
+                editingExpenseId.value = null;
+            };
+            const cancelEditExpense = () => editingExpenseId.value = null;
+            const toggleSplitter = (obj, m) => { const idx = obj.splitters.indexOf(m); idx > -1 ? obj.splitters.splice(idx, 1) : obj.splitters.push(m); };
+            const toggleAllSplitters = (obj) => { obj.splitters = obj.splitters.length === members.value.length ? [] : [...members.value]; };
+
+            const calculateSettlement = () => {
+                let debtsJPY = {}, debtsTWD = {}; members.value.forEach(m => { debtsJPY[m] = 0; debtsTWD[m] = 0; });
+                expenses.value.forEach(ex => {
+                    if (ex.payer === '公費') return;
+                    if (ex.splitters && ex.splitters.length > 0) {
+                        let amount = Math.round(ex.amount / ex.splitters.length);
+                        if (ex.currency === 'JPY') { debtsJPY[ex.payer] += ex.amount; ex.splitters.forEach(s => debtsJPY[s] -= amount); } 
+                        else { debtsTWD[ex.payer] += ex.amount; ex.splitters.forEach(s => debtsTWD[s] -= amount); }
+                    }
+                });
+                settlementStats.value = members.value.map(m => ({ name: m, netJPY: debtsJPY[m], netTWD: debtsTWD[m] }));
+                const getTransfers = (debts) => {
+                    let debtors = [], creditors = [], results = [];
+                    for (const [name, amount] of Object.entries(debts)) { if (amount < -1) debtors.push({ name, amount }); if (amount > 1) creditors.push({ name, amount }); }
+                    debtors.sort((a, b) => a.amount - b.amount); creditors.sort((a, b) => b.amount - a.amount);
+                    let i = 0, j = 0;
+                    while (i < debtors.length && j < creditors.length) {
+                        let amount = Math.min(Math.abs(debtors[i].amount), creditors[j].amount);
+                        if (amount > 0) results.push({ from: debtors[i].name, to: creditors[j].name, amount });
+                        debtors[i].amount += amount; creditors[j].amount -= amount;
+                        if (Math.abs(debtors[i].amount) < 1) i++; if (creditors[j].amount < 1) j++;
+                    }
+                    return results;
+                };
+                transfersJPY.value = getTransfers(debtsJPY); transfersTWD.value = getTransfers(debtsTWD);
+                showSettlementModal.value = true;
+            };
+            
+            // Add/Remove Day (Synced)
+            const addNewDay = () => {
+                const startDate = new Date('2026-01-07');
+                const nextDate = new Date(startDate);
+                nextDate.setDate(startDate.getDate() + itinerary.value.length);
+                const dayOfWeek = ['日', '一', '二', '三', '四', '五', '六'][nextDate.getDay()];
+                const formattedDate = `${nextDate.getMonth() + 1}/${nextDate.getDate()} (${dayOfWeek})`;
+                const shortDate = `${nextDate.getMonth() + 1}/${nextDate.getDate()}`;
+                itinerary.value.push({ date: formattedDate, shortDate: shortDate, title: "自由安排", desc: "新的一天", location: "待定", temp: 0, tempLow: 0, tempHigh: 0, weather: "sun", tags: [], tips: "點擊編輯填寫", events: [] });
+                saveItinerary();
+                switchDay(itinerary.value.length - 1);
+            };
+            const removeLastDay = () => { 
+                if (itinerary.value.length > 1 && confirm("刪除最後一天？")) {
+                    itinerary.value.pop();
+                    saveItinerary();
+                }
+            };
+            
+            const fetchExchangeRate = async () => { isRateLoading.value = true; try { const res = await fetch('https://api.exchangerate-api.com/v4/latest/JPY'); const data = await res.json(); if(data.rates) exchangeRate.value = data.rates.TWD; } catch {} finally { isRateLoading.value = false; } };
+            
+            const fetchRealTimeWeather = async () => {
+                const day = currentDayData.value;
+                if (!day.lat) { weatherState.value = { status: 'too_early', data: null }; return; }
+                const tripStartDate = new Date('2026-01-07'); const targetDayDate = new Date(tripStartDate); targetDayDate.setDate(tripStartDate.getDate() + activeDayIndex.value);
+                if (Math.ceil((targetDayDate - new Date()) / 86400000) > 14) { weatherState.value = { status: 'too_early', data: null }; return; }
+                weatherState.value = { status: 'loading', data: null };
+                const dateStr = targetDayDate.toISOString().split('T')[0];
+                try {
+                    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${day.lat}&longitude=${day.lon}&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=Asia%2FTokyo&start_date=${dateStr}&end_date=${dateStr}`);
+                    const data = await res.json();
+                    if (data.daily) weatherState.value = { status: 'available', data: { max: Math.round(data.daily.temperature_2m_max[0]), min: Math.round(data.daily.temperature_2m_min[0]), code: data.daily.weathercode[0] } };
+                } catch { weatherState.value = { status: 'too_early', data: null }; }
+            };
+            watch(activeDayIndex, fetchRealTimeWeather, { immediate: true });
+
+            onMounted(() => { 
+                lucide.createIcons(); 
+                fetchExchangeRate();
+                if (myFirebaseConfig.apiKey) initFirebase();
+            });
+            
+            watch([currentView, activeDayIndex, expenses.value, isEditingTip, editingEventId], () => nextTick(() => lucide.createIcons()));
+
+            return {
+                currentView, activeDayIndex, itinerary, currentDayData, switchDay, getDayIcon, getWeatherIcon,
+                expenses, newExpense, addExpense, deleteExpense, startEditExpense, saveEditExpense, cancelEditExpense, editingExpenseId, tempExpense,
+                totalRealJPY, totalRealTWD, grandTotalInTWD, exchangeRate, members, daysRemaining,
+                isEditingTip, tempTip, startEditTip, saveTip, parsedTips,
+                toggleSplitter, toggleAllSplitters, showSettlement: calculateSettlement, showSettlementModal, settlementStats, transfersJPY, transfersTWD,
+                weatherState, dbConnected, addNewDay, removeLastDay,
+                fetchExchangeRate, isRateLoading,
+                editingEventId, tempEvent, startEditEvent, saveEditEvent, cancelEditEvent, addNewEvent, deleteEvent,
+                isEditingTitle, tempTitle, startEditTitle, saveTitle
+            };
+        }
+    }).mount('#app');
+</script>
+</body>
+
+</html>
