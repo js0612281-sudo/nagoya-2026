@@ -175,8 +175,14 @@
                                 <div class="flex gap-2 flex-wrap">
                                     <a v-if="event.mapUrl" :href="event.mapUrl" target="_blank" class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-gray-800 text-white text-[10px] font-medium active:scale-95 transition-transform"><i data-lucide="navigation" class="w-3 h-3"></i> 導航</a>
                                     <a v-else :href="`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.title + ' ' + event.sub)}`" target="_blank" class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-gray-800 text-white text-[10px] font-medium active:scale-95 transition-transform"><i data-lucide="navigation" class="w-3 h-3"></i> 導航</a>
-                                    <button v-if="event.link" class="flex items-center gap-1 px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 text-[10px] font-medium hover:bg-gray-50"><i data-lucide="external-link" class="w-3 h-3"></i> 官網</button>
-                                    <button v-if="event.ticket" class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#4B9CD3]/20 text-[#2C5282] text-[10px] font-medium"><i data-lucide="ticket" class="w-3 h-3"></i> 憑證</button>
+                                    
+                                    <!-- 官網按鈕：現在改用 <a> 標籤，如果有連結則顯示 -->
+                                    <a v-if="event.link" :href="event.link" target="_blank" class="flex items-center gap-1 px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 text-[10px] font-medium hover:bg-gray-50"><i data-lucide="external-link" class="w-3 h-3"></i> 官網</a>
+                                    
+                                    <!-- 憑證按鈕：如果有憑證，變成可點擊 -->
+                                    <button v-if="event.ticket" @click="openTicketViewer(event)" class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#4B9CD3] text-white text-[10px] font-medium shadow-sm hover:bg-[#3A8CC3] active:scale-95 transition-all">
+                                        <i data-lucide="ticket" class="w-3 h-3"></i> 查看憑證
+                                    </button>
                                 </div>
                                 <div class="absolute top-2 right-2 flex gap-1">
                                     <button @click="startEditEvent(event)" class="text-gray-300 hover:text-blue-400 p-1"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
@@ -194,13 +200,25 @@
                                 </div>
                                 <input v-model="tempEvent.sub" class="w-full bg-gray-50 border rounded px-2 py-1 text-xs" placeholder="地點/描述">
                                 <input v-model="tempEvent.mapUrl" class="w-full bg-gray-50 border rounded px-2 py-1 text-[10px]" placeholder="Google Maps 連結 (選填)">
-                                <div class="flex gap-2 text-[10px] text-gray-500">
-                                    <label class="flex items-center gap-1"><input type="checkbox" v-model="tempEvent.link"> 官網</label>
-                                    <label class="flex items-center gap-1"><input type="checkbox" v-model="tempEvent.ticket"> 憑證</label>
+                                
+                                <!-- 網址編輯：修正為輸入框 -->
+                                <input v-model="tempEvent.link" class="w-full bg-gray-50 border rounded px-2 py-1 text-[10px]" placeholder="官方網站連結 (選填, 如 https://...)">
+                                
+                                <div class="border-t border-gray-100 pt-2 mt-1">
+                                    <label class="block text-[10px] font-bold text-gray-500 mb-1 flex items-center gap-1"><i data-lucide="image" class="w-3 h-3"></i> 上傳憑證 (圖片)</label>
+                                    <input type="file" accept="image/*" @change="handleTicketUpload" class="w-full text-[10px] text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-[10px] file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                                    <div v-if="tempEvent.ticket || tempTicketFile" class="flex items-center gap-1 mt-1">
+                                        <span class="text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> {{ tempTicketFile ? '準備上傳' : '已有憑證' }}</span>
+                                        <button v-if="tempEvent.ticket && !tempTicketFile" @click="deleteTicketInEdit(eIdx)" class="text-[9px] text-red-400 underline ml-2">刪除現有憑證</button>
+                                    </div>
                                 </div>
+
                                 <div class="flex gap-2 pt-1">
                                     <button @click="cancelEditEvent" class="flex-1 py-1.5 bg-gray-100 text-gray-500 rounded text-xs">取消</button>
-                                    <button @click="saveEditEvent(eIdx)" class="flex-1 py-1.5 bg-[#4B9CD3] text-white rounded text-xs font-bold">完成</button>
+                                    <button @click="saveEditEvent(eIdx)" class="flex-1 py-1.5 bg-[#4B9CD3] text-white rounded text-xs font-bold flex items-center justify-center gap-1">
+                                        <i v-if="isUploading" data-lucide="loader-2" class="w-3 h-3 animate-spin"></i>
+                                        {{ isUploading ? '上傳中...' : '完成' }}
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -332,40 +350,13 @@
                 <button @click="showSettlementModal = false" class="w-full mt-6 bg-[#433D3C] text-white py-3 rounded-xl font-bold text-sm">關閉</button>
             </div>
         </div>
-
-        <!-- VIEW: 緊急求助 -->
-        <div v-if="currentView === 'emergency'" class="h-full bg-[#433D3C] text-white p-6 overflow-y-auto">
-             <h2 class="text-2xl font-bold mb-2 flex items-center gap-2 text-red-400">
-                <i data-lucide="plus-square" class="w-6 h-6"></i> 緊急求助
-            </h2>
-            <div class="space-y-4">
-                <a href="tel:110" class="block bg-red-900/30 border border-red-900/50 p-5 rounded-2xl flex items-center justify-between active:scale-95 transition-transform">
-                    <div>
-                        <h3 class="text-lg font-bold text-red-400 mb-1">警察局</h3>
-                        <p class="text-xs text-red-200/60">犯罪、事故、遺失物品</p>
-                    </div>
-                    <div class="bg-red-500 text-white px-5 py-2 rounded-full font-bold flex items-center gap-2 shadow-lg shadow-red-900/50">
-                        <i data-lucide="phone" class="w-4 h-4"></i> 110
-                    </div>
-                </a>
-                <a href="tel:119" class="block bg-orange-900/30 border border-orange-900/50 p-5 rounded-2xl flex items-center justify-between active:scale-95 transition-transform">
-                    <div>
-                        <h3 class="text-lg font-bold text-orange-400 mb-1">救護車 / 消防</h3>
-                        <p class="text-xs text-orange-200/60">受傷、急病、火災</p>
-                    </div>
-                    <div class="bg-orange-500 text-white px-5 py-2 rounded-full font-bold flex items-center gap-2 shadow-lg shadow-orange-900/50">
-                        <i data-lucide="phone" class="w-4 h-4"></i> 119
-                    </div>
-                </a>
-                <a href="tel:+81661201001" class="block bg-blue-900/30 border border-blue-900/50 p-5 rounded-2xl flex items-center justify-between active:scale-95 transition-transform">
-                    <div>
-                        <h3 class="text-lg font-bold text-blue-400 mb-1">台北駐大阪辦事處</h3>
-                        <p class="text-xs text-blue-200/60">護照遺失、急難救助</p>
-                    </div>
-                    <div class="bg-blue-500 text-white px-5 py-2 rounded-full font-bold flex items-center gap-2 shadow-lg shadow-blue-900/50">
-                        <i data-lucide="phone" class="w-4 h-4"></i> 撥打
-                    </div>
-                </a>
+        
+        <!-- Ticket Viewer Modal (New) -->
+        <div v-if="viewingTicket" class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" @click="closeTicketViewer">
+            <div class="relative max-w-full max-h-full" @click.stop>
+                <img v-if="ticketImageUrl" :src="ticketImageUrl" class="max-w-full max-h-[85vh] rounded-lg shadow-2xl object-contain">
+                <div v-else class="text-white text-center p-4"><i data-lucide="loader-2" class="w-8 h-8 animate-spin mx-auto mb-2"></i><p>讀取憑證中...</p></div>
+                <button @click="closeTicketViewer" class="absolute -top-10 right-0 text-white p-2 hover:bg-white/20 rounded-full"><i data-lucide="x" class="w-6 h-6"></i></button>
             </div>
         </div>
 
@@ -393,6 +384,12 @@
             const isEditingTitle = ref(false);
             const tempTitle = ref({title: '', desc: ''});
 
+            // 憑證上傳相關
+            const tempTicketFile = ref(null);
+            const isUploading = ref(false);
+            const viewingTicket = ref(false);
+            const ticketImageUrl = ref(null);
+
             // 記帳與設定
             const dbConnected = ref(false);
             const showSettlementModal = ref(false);
@@ -401,11 +398,10 @@
             const transfersTWD = ref([]);
             const weatherState = ref({ status: 'loading', data: null });
 
-            const members = ref(['品萱1', '品萱2', '品萱3', 'OY1', 'OY2', 'OY3', 'OY4', 'RUBY1', 'RUBY2']);
+            const members = ref(['爸爸', '媽媽', '大寶', '二寶']);
             const expenses = ref([]);
-            const newExpense = ref({ title: '', amount: '', payer: 'OY', currency: 'JPY', splitters: [...members.value] });
+            const newExpense = ref({ title: '', amount: '', payer: '爸爸', currency: 'JPY', splitters: [...members.value] });
 
-            // 🔴 你的 Firebase Config (寫死在程式碼裡，方便大家使用)
             const myFirebaseConfig = {
                 apiKey: "AIzaSyDPsTLpK7VaGgJoZk3_Kmqzjia-rOR5fNY",
                 authDomain: "hokkaido-trip-f44e9.firebaseapp.com",
@@ -416,18 +412,17 @@
                 measurementId: "G-36BG8FB13C"
             };
 
-            // 名古屋 2026 行程資料
             const defaultItinerary = [
                 { 
                     date: "1/7 (三)", shortDate: "1/7", title: "初見名古屋 & 購物日", 
                     desc: "抵達中部國際機場，市區購物，入住溫馨民宿。", location: "名古屋", lat: 35.1815, lon: 136.9066, tags: ["寶可夢", "HARBS", "鰻魚飯"],
                     tips: "⚠️ 機場出發約 40-50 分鐘。\n🛍️ Parco 有寶可夢中心和 HARBS 蛋糕。\n🏠 民宿地址：Yonchōda-801-10 Shippōchō Akitake, Ama, Aichi\n🍽️ 晚餐：あつた蓬莱軒(鰻魚飯) 或 矢場味噌豬排。",
                     events: [
-                        { id: 1, time: "07:35", title: "抵達機場", sub: "11:03 降落 NGO", link: false, ticket: true },
-                        { id: 2, time: "12:30", title: "機場出發", sub: "包車前往市區", link: false, ticket: false },
-                        { id: 3, time: "13:20", title: "Nagoya PARCO", sub: "寶可夢/HARBS", link: true, ticket: false },
-                        { id: 4, time: "16:30", title: "前往民宿", sub: "包車移動", link: false, ticket: false },
-                        { id: 5, time: "17:10", title: "民宿 Check-in", sub: "Ama, Aichi", mapUrl: "https://maps.google.com/?q=Yonchōda-801-10+Shippōchō+Akitake", link: false, ticket: true }
+                        { id: 1, time: "07:35", title: "抵達機場", sub: "11:03 降落 NGO", link: "", ticket: false },
+                        { id: 2, time: "12:30", title: "機場出發", sub: "包車前往市區", link: "", ticket: false },
+                        { id: 3, time: "13:20", title: "Nagoya PARCO", sub: "寶可夢/HARBS", link: "https://nagoya.parco.jp/", ticket: false },
+                        { id: 4, time: "16:30", title: "前往民宿", sub: "包車移動", link: "", ticket: false },
+                        { id: 5, time: "17:10", title: "民宿 Check-in", sub: "Ama, Aichi", mapUrl: "https://maps.google.com/?q=Yonchōda-801-10+Shippōchō+Akitake", link: "", ticket: false }
                     ]
                 },
                 { 
@@ -435,10 +430,10 @@
                     desc: "吉卜力公園全日遊，進入夢幻動畫世界。", location: "長久手", lat: 35.1709, lon: 137.0867, tags: ["吉卜力", "龍貓", "親子"],
                     tips: "🍃 吉卜力公園沒有遊樂設施，主要是場景還原。\n🍔 午餐：園區餐車或摩斯漢堡。\n🍽️ 晚餐：Steak House Asakuma (有自助吧，適合小孩)。",
                     events: [
-                        { id: 6, time: "09:00", title: "民宿出發", sub: "前往吉卜力", link: false, ticket: false },
-                        { id: 7, time: "10:00", title: "吉卜力公園", sub: "Ghibli Park", link: true, ticket: true },
-                        { id: 8, time: "16:00", title: "返回市區", sub: "往餐廳移動", link: false, ticket: false },
-                        { id: 9, time: "17:00", title: "晚餐", sub: "Steak House Asakuma", link: true, ticket: false }
+                        { id: 6, time: "09:00", title: "民宿出發", sub: "前往吉卜力", link: "", ticket: false },
+                        { id: 7, time: "10:00", title: "吉卜力公園", sub: "Ghibli Park", link: "https://ghibli-park.jp/", ticket: false },
+                        { id: 8, time: "16:00", title: "返回市區", sub: "往餐廳移動", link: "", ticket: false },
+                        { id: 9, time: "17:00", title: "晚餐", sub: "Steak House Asakuma", link: "https://www.asakuma.co.jp/", ticket: false }
                     ]
                 },
                 { 
@@ -446,10 +441,10 @@
                     desc: "名古屋港水族館看虎鯨，下午 LaLaport 購物。", location: "名古屋港", lat: 35.0906, lon: 136.8781, tags: ["水族館", "虎鯨", "阿卡將"],
                     tips: "🐬 必看海豚秀和虎鯨表演。\n🐟 午餐在漁港吃新鮮海鮮。\n🛍️ LaLaport 有阿卡將本舖(母嬰用品)和 Loft。",
                     events: [
-                        { id: 10, time: "09:30", title: "民宿出發", sub: "前往水族館", link: false, ticket: false },
-                        { id: 11, time: "10:10", title: "名古屋港水族館", sub: "海豚秀/虎鯨", link: false, ticket: true },
-                        { id: 12, time: "12:30", title: "午餐", sub: "漁港", link: false, ticket: false },
-                        { id: 13, time: "13:45", title: "LaLaport", sub: "購物/晚餐", link: true, ticket: false }
+                        { id: 10, time: "09:30", title: "民宿出發", sub: "前往水族館", link: "", ticket: false },
+                        { id: 11, time: "10:10", title: "名古屋港水族館", sub: "海豚秀/虎鯨", link: "https://nagoyaaqua.jp/", ticket: false },
+                        { id: 12, time: "12:30", title: "午餐", sub: "漁港", link: "", ticket: false },
+                        { id: 13, time: "13:45", title: "LaLaport", sub: "購物/晚餐", link: "https://mitsui-shopping-park.com/lalaport/minatoaquls/", ticket: false }
                     ]
                 },
                 { 
@@ -457,9 +452,9 @@
                     desc: "LEGOLAND Japan 全日暢玩。", location: "金城ふ頭", lat: 35.0507, lon: 136.8436, tags: ["樂高", "遊樂園"],
                     tips: "🧱 日本樂高樂園，適合 2-12 歲小孩。\n🍟 午餐在樂園內解決。",
                     events: [
-                        { id: 14, time: "09:00", title: "民宿出發", sub: "前往樂高樂園", link: false, ticket: false },
-                        { id: 15, time: "09:30", title: "LEGOLAND", sub: "全日暢玩", link: true, ticket: true },
-                        { id: 16, time: "18:00", title: "晚餐", sub: "市區或民宿附近", link: false, ticket: false }
+                        { id: 14, time: "09:00", title: "民宿出發", sub: "前往樂高樂園", link: "", ticket: false },
+                        { id: 15, time: "09:30", title: "LEGOLAND", sub: "全日暢玩", link: "https://www.legoland.jp/", ticket: false },
+                        { id: 16, time: "18:00", title: "晚餐", sub: "市區或民宿附近", link: "", ticket: false }
                     ]
                 },
                 { 
@@ -467,11 +462,11 @@
                     desc: "全家穿和服拍照，逛大須觀音與商店街。", location: "大須", lat: 35.1598, lon: 136.9019, tags: ["和服", "大須", "飛騨牛"],
                     tips: "👘 10:00 Vasara 名古屋車站店換和服。\n📸 大須觀音有巨型招財貓，適合拍照。\n🥩 晚餐預約：飛騨牛一頭家 馬喰一代 WEST。",
                     events: [
-                        { id: 17, time: "09:00", title: "民宿出發", sub: "前往 Vasara", link: false, ticket: false },
-                        { id: 18, time: "10:00", title: "和服體驗", sub: "Vasara 名古屋站", link: true, ticket: true },
-                        { id: 19, time: "12:00", title: "大須商店街", sub: "逛街/午餐", link: true, ticket: false },
-                        { id: 20, time: "16:00", title: "歸還和服", sub: "車站採買", link: false, ticket: false },
-                        { id: 21, time: "18:00", title: "晚餐", sub: "馬喰一代 WEST", link: true, ticket: true }
+                        { id: 17, time: "09:00", title: "民宿出發", sub: "前往 Vasara", link: "", ticket: false },
+                        { id: 18, time: "10:00", title: "和服體驗", sub: "Vasara 名古屋站", link: "https://vasara-h.co.jp/", ticket: false },
+                        { id: 19, time: "12:00", title: "大須商店街", sub: "逛街/午餐", link: "http://osu.co.jp/", ticket: false },
+                        { id: 20, time: "16:00", title: "歸還和服", sub: "車站採買", link: "", ticket: false },
+                        { id: 21, time: "18:00", title: "晚餐", sub: "馬喰一代 WEST", link: "https://bakuroichidai.jp/", ticket: false }
                     ]
                 },
                 { 
@@ -479,10 +474,10 @@
                     desc: "前往機場，最後採買，準備搭機。", location: "中部機場", lat: 34.8588, lon: 136.8146, tags: ["蝦餅", "波音787"], 
                     tips: "🚐 08:30 準時 Check-out 發車。\n✈️ 建議 09:30-10:00 抵達機場。\n🦐 4樓藍天城買蝦餅之里 (えびせんべいの里)。\n🛫 12:05 起飛。",
                     events: [
-                        { id: 22, time: "08:30", title: "民宿 Check-out", sub: "準時發車", link: false, ticket: false },
-                        { id: 23, time: "09:30", title: "抵達機場", sub: "辦理登機", link: false, ticket: true },
-                        { id: 24, time: "10:30", title: "機場巡禮", sub: "蝦餅/波音787", link: false, ticket: false },
-                        { id: 25, time: "12:05", title: "起飛", sub: "回溫暖的家", link: false, ticket: true }
+                        { id: 22, time: "08:30", title: "民宿 Check-out", sub: "準時發車", link: "", ticket: false },
+                        { id: 23, time: "09:30", title: "抵達機場", sub: "辦理登機", link: "https://www.centrair.jp/", ticket: false },
+                        { id: 24, time: "10:30", title: "機場巡禮", sub: "蝦餅/波音787", link: "", ticket: false },
+                        { id: 25, time: "12:05", title: "起飛", sub: "回溫暖的家", link: "", ticket: false }
                     ] 
                 }
             ];
@@ -494,13 +489,12 @@
             const totalRealJPY = computed(() => expenses.value.filter(e => e.currency === 'JPY').reduce((sum, e) => sum + Number(e.amount), 0));
             const totalRealTWD = computed(() => expenses.value.filter(e => e.currency === 'TWD').reduce((sum, e) => sum + Number(e.amount), 0));
             const grandTotalInTWD = computed(() => Math.round(totalRealTWD.value + totalRealJPY.value * exchangeRate.value));
-            const targetDate = new Date('2026-01-07'); // Set target date to Nagoya Trip start
+            const targetDate = new Date('2026-01-07');
             const daysRemaining = computed(() => { const today = new Date(); return Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24)); });
             const parsedTips = computed(() => marked.parse(currentDayData.value.tips || ''));
 
             // Firebase Logic
             let db;
-            // ⚠️ 這裡使用 'nagoya_2026' 作為文件 ID，確保不會讀取到舊的北海道資料
             const collectionId = 'nagoya_2026'; 
 
             const initFirebase = () => {
@@ -514,16 +508,13 @@
                         onAuthStateChanged(auth, (user) => {
                             if (user) {
                                 dbConnected.value = true;
-                                // 1. 監聽記帳 (使用獨立的 collection 以免混淆)
                                 onSnapshot(collection(db, 'expenses_nagoya'), (snap) => {
                                     expenses.value = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt - a.createdAt);
                                 });
-                                // 2. 監聽行程
                                 onSnapshot(doc(db, 'plans', collectionId), (docSnap) => {
                                     if (docSnap.exists()) {
                                         itinerary.value = docSnap.data().days;
                                     } else {
-                                        // 如果雲端沒資料 (第一次用)，把預設的名古屋資料寫上去
                                         setDoc(doc(db, 'plans', collectionId), { days: defaultItinerary });
                                     }
                                 });
@@ -533,19 +524,16 @@
                 }
             };
             
-            // Sync Itinerary to Firebase
             const saveItinerary = () => {
                 if (dbConnected.value) {
                     setDoc(doc(db, 'plans', collectionId), { days: itinerary.value });
                 }
             };
 
-            // Events Handling
             const switchDay = (i) => { currentView.value = 'itinerary'; activeDayIndex.value = i; isEditingTip.value = false; isEditingTitle.value = false; };
             const getDayIcon = (i) => i === 0 || i === 5 ? 'plane' : (i === 1 || i === 4 ? 'camera' : (i === 3 ? 'gamepad-2' : 'map-pin'));
             const getWeatherIcon = (w) => w === 'snow' ? 'snowflake' : (w === 'sun' ? 'sun' : 'cloud');
             
-            // Edit Title/Desc
             const startEditTitle = () => { tempTitle.value = {title: currentDayData.value.title, desc: currentDayData.value.desc}; isEditingTitle.value = true; };
             const saveTitle = () => { 
                 itinerary.value[activeDayIndex.value].title = tempTitle.value.title; 
@@ -554,26 +542,115 @@
                 saveItinerary();
             };
 
-            // Edit Itinerary Event
-            const startEditEvent = (e) => { editingEventId.value = e.id; tempEvent.value = {...e}; };
-            const cancelEditEvent = () => { editingEventId.value = null; tempEvent.value = {}; };
-            const saveEditEvent = (idx) => { 
+            const startEditEvent = (e) => { editingEventId.value = e.id; tempEvent.value = {...e}; tempTicketFile.value = null; };
+            const cancelEditEvent = () => { editingEventId.value = null; tempEvent.value = {}; tempTicketFile.value = null; };
+            
+            // Image Compression
+            const compressImage = (file) => {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            const maxWidth = 1024; // Limit width to 1024px
+                            let width = img.width;
+                            let height = img.height;
+                            if (width > maxWidth) { height *= maxWidth / width; width = maxWidth; }
+                            canvas.width = width; canvas.height = height;
+                            ctx.drawImage(img, 0, 0, width, height);
+                            // Compress to JPEG 60%
+                            resolve(canvas.toDataURL('image/jpeg', 0.6)); 
+                        };
+                        img.src = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                });
+            };
+
+            const handleTicketUpload = async (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    isUploading.value = true;
+                    try {
+                        tempTicketFile.value = await compressImage(file);
+                    } catch(e) { console.error(e); }
+                    isUploading.value = false;
+                }
+            };
+
+            const saveEditEvent = async (idx) => { 
+                isUploading.value = true;
+                const eventId = String(tempEvent.value.id);
+                // 1. 如果有新上傳的圖片，存到 tickets_nagoya 集合
+                if (tempTicketFile.value && dbConnected.value) {
+                    try {
+                        await setDoc(doc(db, 'tickets_nagoya', eventId), { image: tempTicketFile.value });
+                        tempEvent.value.ticket = true; // 標記為有憑證
+                    } catch(e) {
+                        alert("上傳失敗，請確認網路連線");
+                    }
+                }
+                
+                // 2. 儲存行程資料
                 itinerary.value[activeDayIndex.value].events[idx] = {...tempEvent.value}; 
                 editingEventId.value = null; 
                 saveItinerary();
+                isUploading.value = false;
             };
+
+            const deleteTicketInEdit = async (idx) => {
+                if(confirm('確定刪除此憑證圖片嗎？')) {
+                    if (dbConnected.value) {
+                        // 嘗試刪除文件，如果不存在也沒關係（可能是舊的假標記）
+                        try {
+                            await deleteDoc(doc(db, 'tickets_nagoya', String(tempEvent.value.id)));
+                        } catch(e) {
+                            console.log("Delete skipped or failed", e);
+                        }
+                    }
+                    // 無論雲端是否刪除成功，都強制更新本地狀態
+                    tempEvent.value.ticket = false;
+                    tempTicketFile.value = null;
+                }
+            };
+
+            const openTicketViewer = async (event) => {
+                viewingTicket.value = true;
+                ticketImageUrl.value = null;
+                if (dbConnected.value) {
+                    const snap = await getDoc(doc(db, 'tickets_nagoya', String(event.id)));
+                    if (snap.exists()) {
+                        ticketImageUrl.value = snap.data().image;
+                    } else {
+                        // Fallback: 如果資料庫沒圖但被標記為 true (可能是舊資料或沒上傳成功)
+                        alert("找不到憑證圖片");
+                        viewingTicket.value = false;
+                    }
+                } else {
+                    alert("請連接網路以查看憑證");
+                    viewingTicket.value = false;
+                }
+            };
+
+            const closeTicketViewer = () => { viewingTicket.value = false; ticketImageUrl.value = null; };
+
             const addNewEvent = () => {
-                itinerary.value[activeDayIndex.value].events.push({ id: Date.now(), time: "12:00", title: "新行程", sub: "地點", link: false, ticket: false });
+                itinerary.value[activeDayIndex.value].events.push({ id: Date.now(), time: "12:00", title: "新行程", sub: "地點", link: "", ticket: false });
                 saveItinerary();
             };
-            const deleteEvent = (idx) => { 
-                if(confirm("確定刪除？")) {
+            const deleteEvent = async (idx) => { 
+                if(confirm("確定刪除此行程與憑證？")) {
+                    const event = itinerary.value[activeDayIndex.value].events[idx];
+                    if (event.ticket && dbConnected.value) {
+                        await deleteDoc(doc(db, 'tickets_nagoya', String(event.id)));
+                    }
                     itinerary.value[activeDayIndex.value].events.splice(idx, 1);
                     saveItinerary();
                 }
             };
             
-            // Tips Editing
             const startEditTip = () => { tempTip.value = currentDayData.value.tips; isEditingTip.value = true; };
             const saveTip = () => { 
                 itinerary.value[activeDayIndex.value].tips = tempTip.value; 
@@ -581,7 +658,6 @@
                 saveItinerary();
             };
 
-            // Expense Logic
             const addExpense = async () => {
                 if (!newExpense.value.title) return;
                 const data = { ...newExpense.value, amount: Number(newExpense.value.amount), date: new Date().toLocaleDateString('zh-TW'), createdAt: Date.now() };
@@ -629,7 +705,6 @@
                 showSettlementModal.value = true;
             };
             
-            // Add/Remove Day (Synced)
             const addNewDay = () => {
                 const startDate = new Date('2026-01-07');
                 const nextDate = new Date(startDate);
@@ -671,7 +746,7 @@
                 if (myFirebaseConfig.apiKey) initFirebase();
             });
             
-            watch([currentView, activeDayIndex, expenses.value, isEditingTip, editingEventId], () => nextTick(() => lucide.createIcons()));
+            watch([currentView, activeDayIndex, expenses.value, isEditingTip, editingEventId, viewingTicket, tempTicketFile], () => nextTick(() => lucide.createIcons()));
 
             return {
                 currentView, activeDayIndex, itinerary, currentDayData, switchDay, getDayIcon, getWeatherIcon,
@@ -682,14 +757,12 @@
                 weatherState, dbConnected, addNewDay, removeLastDay,
                 fetchExchangeRate, isRateLoading,
                 editingEventId, tempEvent, startEditEvent, saveEditEvent, cancelEditEvent, addNewEvent, deleteEvent,
-                isEditingTitle, tempTitle, startEditTitle, saveTitle
+                isEditingTitle, tempTitle, startEditTitle, saveTitle,
+                // Ticket related
+                handleTicketUpload, isUploading, tempTicketFile, deleteTicketInEdit, openTicketViewer, closeTicketViewer, viewingTicket, ticketImageUrl
             };
         }
     }).mount('#app');
 </script>
 </body>
-
 </html>
-
-
-
