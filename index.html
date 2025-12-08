@@ -482,6 +482,43 @@
             </div>
         </div>
 
+        <!-- VIEW: 設定 (新增：成員管理功能) -->
+        <div v-if="currentView === 'settings'" class="h-full bg-[#FDFCF8] p-6 overflow-y-auto">
+            <h2 class="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                <i data-lucide="settings" class="w-6 h-6 text-[#4B9CD3]"></i> 設定
+            </h2>
+            
+            <div class="space-y-4">
+                <!-- 1. 匯率設定 -->
+                <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                    <h3 class="text-sm font-bold text-gray-700 mb-2">匯率設定</h3>
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs text-gray-500">1 JPY = </span>
+                        <input type="number" v-model="exchangeRate" step="0.001" class="w-24 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-center outline-none focus:border-[#4B9CD3]">
+                        <span class="text-xs text-gray-500">TWD</span>
+                    </div>
+                    <button @click="fetchExchangeRate" class="mt-2 text-[10px] text-blue-500 underline flex items-center gap-1"><i data-lucide="refresh-cw" class="w-3 h-3" :class="{'animate-spin': isRateLoading}"></i> 抓取即時匯率</button>
+                </div>
+
+                <!-- 2. 成員名單設定 (新增) -->
+                <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                    <h3 class="text-sm font-bold text-gray-700 mb-3">成員名單 (記帳用)</h3>
+                    <div class="flex flex-wrap gap-2 mb-4">
+                        <div v-for="(member, idx) in members" :key="member" class="flex items-center gap-1 bg-gray-100 px-3 py-1.5 rounded-full text-xs text-gray-600">
+                            {{ member }}
+                            <button @click="removeMember(idx)" class="text-gray-400 hover:text-red-500 ml-1"><i data-lucide="x" class="w-3 h-3"></i></button>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <input v-model="newMemberName" @keyup.enter="addMember" placeholder="輸入成員名稱..." class="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-[#4B9CD3]">
+                        <button @click="addMember" class="bg-[#4B9CD3] text-white px-3 py-2 rounded-lg text-xs font-bold">新增</button>
+                    </div>
+                </div>
+            </div>
+
+            <p v-if="dbConnected" class="text-[10px] text-green-500 mt-6 flex items-center gap-1 justify-center"><i data-lucide="check" class="w-3 h-3"></i> Firebase 連線正常 (Nagoya 2026)</p>
+        </div>
+
         <!-- Settlement Modal -->
         <div v-if="showSettlementModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="showSettlementModal = false"></div>
@@ -567,6 +604,7 @@
             const weatherState = ref({ status: 'loading', data: null });
 
             const members = ref(['品萱1', '品萱2', '品萱3', 'OY1', 'OY2', 'OY3', 'OY4', 'RUBY1', 'RUBY2']);
+            const newMemberName = ref(''); // For adding new member
             const expenses = ref([]);
             const newExpense = ref({ title: '', amount: '', payer: 'OY', currency: 'JPY', splitters: [...members.value] });
             
@@ -688,11 +726,11 @@
                                     if (docSnap.exists()) {
                                         const data = docSnap.data();
                                         if (data.days) itinerary.value = data.days;
-                                        // 載入求助設定 (如果有)
                                         if (data.officeInfo) officeInfo.value = data.officeInfo;
                                         if (data.emergencyContact) emergencyContact.value = data.emergencyContact;
+                                        if (data.members) members.value = data.members; // Load members
                                     } else {
-                                        setDoc(doc(db, 'plans', collectionId), { days: defaultItinerary, officeInfo: officeInfo.value, emergencyContact: emergencyContact.value });
+                                        setDoc(doc(db, 'plans', collectionId), { days: defaultItinerary, officeInfo: officeInfo.value, emergencyContact: emergencyContact.value, members: members.value });
                                     }
                                 });
                             }
@@ -706,8 +744,25 @@
                     setDoc(doc(db, 'plans', collectionId), { 
                         days: itinerary.value,
                         officeInfo: officeInfo.value,
-                        emergencyContact: emergencyContact.value
+                        emergencyContact: emergencyContact.value,
+                        members: members.value // Save members
                     }, { merge: true });
+                }
+            };
+
+            // Add/Remove Member Logic
+            const addMember = () => {
+                if (newMemberName.value.trim()) {
+                    members.value.push(newMemberName.value.trim());
+                    newMemberName.value = '';
+                    saveItinerary();
+                }
+            };
+
+            const removeMember = (index) => {
+                if (confirm(`確定移除成員 ${members.value[index]} 嗎？`)) {
+                    members.value.splice(index, 1);
+                    saveItinerary();
                 }
             };
 
@@ -1105,7 +1160,9 @@
                 isEditingOffice, officeInfo, saveOfficeInfo,
                 isEditingContact, emergencyContact, saveEmergencyContact,
                 // Reorder
-                moveDay
+                moveDay,
+                // Settings Members
+                addMember, removeMember, newMemberName
             };
         }
     }).mount('#app');
