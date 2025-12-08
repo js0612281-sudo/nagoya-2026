@@ -42,7 +42,7 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .bg-sidebar { background-color: #F4F1EA; } 
-        .bg-active { background-color: #4B9CD3; color: white; } /* 改為適合名古屋/海邊的藍色系 */
+        .bg-active { background-color: #4B9CD3; color: white; }
         .text-accent { color: #2C5282; } 
         .bg-card { background-color: #FFFFFF; }
         .border-soft { border-color: #EDE9E0; }
@@ -50,16 +50,11 @@
         .prose-tips ul { list-style-type: disc; padding-left: 1.2em; margin-bottom: 0.5em; }
         .prose-tips strong { color: #4B9CD3; font-weight: 700; }
         .prose-tips li { margin-bottom: 0.3em; }
-        
-        /* 📱 手機底部安全區域修正 */
-        .pb-safe {
-            padding-bottom: env(safe-area-inset-bottom, 20px);
-        }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
     </style>
 </head>
 <body>
 
-<!-- 修正高度為 100dvh 以適應手機瀏覽器 -->
 <div id="app" class="flex h-[100dvh] w-full max-w-md mx-auto shadow-2xl relative overflow-hidden bg-[#FDFCF8]">
 
     <!-- 左側導航欄 -->
@@ -71,7 +66,6 @@
             <div class="flex items-baseline"><span class="text-sm font-bold font-mono leading-none">{{ daysRemaining }}</span><span class="text-[8px] ml-[1px]">天</span></div>
         </div>
 
-        <!-- 記帳助手按鈕 (置頂) -->
         <div class="w-full px-2 mb-4 border-b border-gray-200 pb-4 flex flex-col items-center">
             <button @click="currentView = 'expense'" 
                 class="flex flex-col items-center justify-center w-14 py-3 rounded-xl transition-all shadow-sm"
@@ -81,18 +75,30 @@
             </button>
         </div>
 
-        <!-- 天數選單 -->
         <div class="flex-1 w-full space-y-3 flex flex-col items-center overflow-y-auto no-scrollbar pb-4">
+            <!-- 天數按鈕 -->
             <button v-for="(day, index) in itinerary" :key="index" @click="switchDay(index)" class="flex flex-col items-center justify-center w-12 py-2 rounded-xl transition-all duration-300" :class="currentView === 'itinerary' && activeDayIndex === index ? 'bg-active shadow-md transform scale-105' : 'text-gray-400 hover:bg-white/50'">
-                <i :data-lucide="getDayIcon(index)" class="w-5 h-5 mb-1"></i><span class="text-[10px] font-bold">Day {{ index + 1 }}</span><span class="text-[8px] font-mono opacity-80">{{ day.shortDate }}</span>
+                <i :data-lucide="getDayIcon(index)" class="w-5 h-5 mb-1"></i>
+                <span class="text-[10px] font-bold">Day {{ index + 1 }}</span>
+                <span class="text-[8px] font-mono opacity-80">{{ day.shortDate }}</span>
             </button>
+
+            <!-- 控制區 -->
             <div class="flex flex-col gap-2 mt-2 border-t border-gray-200 pt-2 w-full items-center">
-                <button @click="addNewDay" class="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-gray-300 text-gray-400 hover:border-[#4B9CD3] hover:text-[#4B9CD3] hover:bg-white transition-all" title="新增天數"><i data-lucide="plus" class="w-4 h-4"></i></button>
-                <button v-if="itinerary.length > 1" @click="removeLastDay" class="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-gray-300 text-gray-400 hover:border-red-400 hover:text-red-400 hover:bg-white transition-all" title="刪除最後一天"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                
+                <!-- 切換到「排序模式」按鈕 -->
+                <button @click="currentView = 'reorder'" 
+                    class="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-gray-300 text-gray-400 hover:border-gray-500 hover:text-gray-600 transition-all" 
+                    :class="currentView === 'reorder' ? 'bg-[#4B9CD3] text-white border-none shadow-md' : ''"
+                    title="調整行程順序">
+                    <i data-lucide="arrow-up-down" class="w-4 h-4"></i>
+                </button>
+
+                <button @click="insertDay" class="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-gray-300 text-gray-400 hover:border-[#4B9CD3] hover:text-[#4B9CD3] hover:bg-white transition-all" title="插入一天"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                <button v-if="itinerary.length > 1" @click="removeCurrentDay" class="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-gray-300 text-gray-400 hover:border-red-400 hover:text-red-400 hover:bg-white transition-all" title="刪除此日"><i data-lucide="minus" class="w-4 h-4"></i></button>
             </div>
         </div>
 
-        <!-- 底部功能鍵 (增加 pb-safe 安全距離) -->
         <div class="mt-auto w-full flex flex-col items-center space-y-3 border-t border-gray-200 pt-4 pb-safe bg-sidebar z-30">
             <button @click="currentView = 'settings'" class="flex flex-col items-center justify-center w-12 py-2 rounded-xl transition-all" :class="currentView === 'settings' ? 'bg-gray-200 text-gray-600' : 'text-gray-400'"><i data-lucide="settings" class="w-5 h-5 mb-1"></i><span class="text-[9px]">設定</span></button>
             <button @click="currentView = 'emergency'" class="flex flex-col items-center justify-center w-12 py-2 rounded-xl transition-all" :class="currentView === 'emergency' ? 'bg-red-50 text-red-500 border border-red-100' : 'text-gray-400'"><i data-lucide="siren" class="w-5 h-5 mb-1"></i><span class="text-[9px]">求助</span></button>
@@ -106,11 +112,18 @@
         <div v-if="currentView === 'itinerary'" class="min-h-full pb-safe">
             <div class="px-6 pt-8 pb-4">
                 <div class="flex justify-between items-center mb-3">
-                    <div class="inline-block bg-[#4B9CD3] text-white text-[10px] font-bold px-3 py-1 rounded-full tracking-wider shadow-sm">DAY {{ activeDayIndex + 1 }} • {{ currentDayData.date }}</div>
+                    <!-- 1. 日期編輯功能 -->
+                    <div v-if="!isEditingDate" @click="startEditDate" class="inline-block bg-[#4B9CD3] text-white text-[10px] font-bold px-3 py-1 rounded-full tracking-wider shadow-sm cursor-pointer hover:bg-blue-600 transition-colors">
+                        DAY {{ activeDayIndex + 1 }} • {{ currentDayData.date }} <i data-lucide="edit-3" class="w-3 h-3 inline ml-1 opacity-70"></i>
+                    </div>
+                    <div v-else class="flex items-center gap-2 animate-in fade-in">
+                        <input v-model="tempDateString" class="text-[10px] px-2 py-1 rounded border border-blue-300 w-32 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="例如: 1/8">
+                        <button @click="saveDate" class="bg-blue-500 text-white p-1 rounded-full"><i data-lucide="check" class="w-3 h-3"></i></button>
+                    </div>
+
                     <span v-if="dbConnected" class="text-[9px] text-green-600 bg-green-50 px-2 py-1 rounded-full flex items-center gap-1"><i data-lucide="cloud" class="w-3 h-3"></i> 已同步</span>
                 </div>
                 
-                <!-- 可編輯標題與描述 -->
                 <div v-if="!isEditingTitle">
                     <h1 class="text-2xl font-bold text-[#433D3C] leading-tight mb-2" @click="startEditTitle">{{ currentDayData.title }}</h1>
                     <p class="text-xs text-gray-500 leading-relaxed mb-4" @click="startEditTitle">{{ currentDayData.desc }}</p>
@@ -125,7 +138,6 @@
                     <span v-for="tag in currentDayData.tags" :key="tag" class="flex items-center gap-1 bg-blue-50 text-[#2C5282] px-2 py-1 rounded-lg text-[10px] font-bold border border-[#4B9CD3]/30"><i data-lucide="thumbs-up" class="w-3 h-3"></i> {{ tag }}</span>
                 </div>
 
-                <!-- 導遊小撇步 (手動編輯版) -->
                 <div class="bg-[#433D3C] text-white p-4 rounded-2xl shadow-lg mb-6 relative overflow-hidden group min-h-[100px] transition-all duration-300">
                     <div class="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-bl-full pointer-events-none"></div>
                     <div class="flex justify-between items-start relative z-10 mb-2">
@@ -141,14 +153,40 @@
                     </div>
                 </div>
 
-                <!-- 天氣卡片 -->
+                <!-- 4. 天氣卡片 (可編輯地點與座標) -->
                 <div class="bg-white border border-gray-100 p-4 rounded-2xl shadow-sm mb-2 relative overflow-hidden transition-all duration-300">
-                    <div class="flex justify-between items-center mb-3 relative z-10">
-                        <span class="text-xs font-bold text-gray-600 flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3"></i> {{ currentDayData.location }}</span>
-                        <span v-if="weatherState.status === 'loading'" class="text-[9px] bg-gray-100 text-gray-400 px-2 py-1 rounded-full flex items-center gap-1"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 讀取中</span>
-                        <span v-else-if="weatherState.status === 'too_early'" class="text-[9px] bg-gray-100 text-gray-400 px-2 py-1 rounded-full">尚無預報資料</span>
-                        <span v-else class="text-[9px] bg-green-50 text-green-600 px-2 py-1 rounded-full border border-green-100 flex items-center gap-1"><i data-lucide="check-circle" class="w-3 h-3"></i> 氣象預報</span>
+                    <div class="flex justify-between items-start mb-3 relative z-10">
+                        <!-- 一般顯示模式 -->
+                        <div v-if="!isEditingLocation" class="flex flex-col">
+                            <span class="text-xs font-bold text-gray-600 flex items-center gap-1">
+                                <i data-lucide="map-pin" class="w-3 h-3"></i> {{ currentDayData.location }}
+                            </span>
+                            <span class="text-[8px] text-gray-300 font-mono ml-4">{{ currentDayData.lat }}, {{ currentDayData.lon }}</span>
+                        </div>
+                        <!-- 編輯模式 -->
+                        <div v-else class="flex flex-col gap-2 w-full pr-8 animate-in fade-in">
+                            <input v-model="tempLocation.name" class="text-xs border rounded px-2 py-1 bg-gray-50" placeholder="地點名稱">
+                            <div class="flex gap-2">
+                                <input v-model="tempLocation.lat" class="text-[10px] border rounded px-2 py-1 w-1/2 bg-gray-50" placeholder="緯度 Lat">
+                                <input v-model="tempLocation.lon" class="text-[10px] border rounded px-2 py-1 w-1/2 bg-gray-50" placeholder="經度 Lon">
+                            </div>
+                            <div class="flex gap-2 justify-end">
+                                <a :href="`https://www.google.com/maps/search/?api=1&query=${tempLocation.name}`" target="_blank" class="text-[9px] text-blue-400 underline mr-auto self-center">查座標</a>
+                                <button @click="isEditingLocation = false" class="text-[10px] px-2 py-1 bg-gray-100 rounded">取消</button>
+                                <button @click="saveLocation" class="text-[10px] px-2 py-1 bg-[#4B9CD3] text-white rounded font-bold">更新天氣</button>
+                            </div>
+                        </div>
+
+                        <!-- 按鈕區 -->
+                        <button v-if="!isEditingLocation" @click="startEditLocation" class="text-gray-300 hover:text-blue-500 absolute top-0 right-0 p-1">
+                            <i data-lucide="edit-3" class="w-3 h-3"></i>
+                        </button>
+                        
+                        <span v-if="!isEditingLocation && weatherState.status === 'loading'" class="text-[9px] bg-gray-100 text-gray-400 px-2 py-1 rounded-full flex items-center gap-1 self-start"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 讀取中</span>
+                        <span v-else-if="!isEditingLocation && weatherState.status === 'too_early'" class="text-[9px] bg-gray-100 text-gray-400 px-2 py-1 rounded-full self-start">尚無預報資料</span>
+                        <span v-else-if="!isEditingLocation" class="text-[9px] bg-green-50 text-green-600 px-2 py-1 rounded-full border border-green-100 flex items-center gap-1 self-start"><i data-lucide="check-circle" class="w-3 h-3"></i> 氣象預報</span>
                     </div>
+
                     <div v-if="weatherState.status === 'available'" class="flex justify-between items-center text-center relative z-10 animate-in fade-in">
                         <div class="flex flex-col items-center"><span class="text-[10px] text-gray-400">最低</span><i data-lucide="thermometer" class="w-5 h-5 text-blue-300 my-1"></i><span class="text-xs font-bold">{{ weatherState.data.min }}°</span></div>
                         <div class="w-[1px] h-6 bg-gray-100"></div>
@@ -156,17 +194,14 @@
                         <div class="w-[1px] h-6 bg-gray-100"></div>
                         <div class="flex flex-col items-center"><span class="text-[10px] text-gray-400">最高</span><i data-lucide="sun" class="w-5 h-5 text-orange-300 my-1"></i><span class="text-xs font-bold">{{ weatherState.data.max }}°</span></div>
                     </div>
-                    <div v-else class="flex flex-col items-center justify-center py-4 text-gray-300 gap-2"><i data-lucide="calendar-clock" class="w-8 h-8 opacity-50"></i><span class="text-[10px]">距離出發日期較遠，暫無準確預報</span></div>
                 </div>
             </div>
 
-            <!-- 時間軸列表 (含事件編輯) -->
             <div class="px-4 pb-20">
                 <div class="relative pl-4 border-l-2 border-dashed border-gray-200 ml-2 space-y-6">
                     <div v-for="(event, eIdx) in currentDayData.events" :key="event.id" class="relative pl-6 group">
                         <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 border-[#FDFCF8] shadow-sm flex items-center justify-center bg-[#4B9CD3]"></div>
                         
-                        <!-- 顯示模式 -->
                         <div v-if="editingEventId !== event.id">
                             <div class="text-xs font-mono font-bold text-[#4B9CD3] mb-1">{{ event.time }}</div>
                             <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow relative">
@@ -175,11 +210,7 @@
                                 <div class="flex gap-2 flex-wrap">
                                     <a v-if="event.mapUrl" :href="event.mapUrl" target="_blank" class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-gray-800 text-white text-[10px] font-medium active:scale-95 transition-transform"><i data-lucide="navigation" class="w-3 h-3"></i> 導航</a>
                                     <a v-else :href="`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.title + ' ' + event.sub)}`" target="_blank" class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-gray-800 text-white text-[10px] font-medium active:scale-95 transition-transform"><i data-lucide="navigation" class="w-3 h-3"></i> 導航</a>
-                                    
-                                    <!-- 官網按鈕：現在改用 <a> 標籤，如果有連結則顯示 -->
                                     <a v-if="event.link" :href="event.link" target="_blank" class="flex items-center gap-1 px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 text-[10px] font-medium hover:bg-gray-50"><i data-lucide="external-link" class="w-3 h-3"></i> 官網</a>
-                                    
-                                    <!-- 憑證按鈕：如果有憑證，變成可點擊 -->
                                     <button v-if="event.ticket" @click="openTicketViewer(event)" class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#4B9CD3] text-white text-[10px] font-medium shadow-sm hover:bg-[#3A8CC3] active:scale-95 transition-all">
                                         <i data-lucide="ticket" class="w-3 h-3"></i> 查看憑證
                                     </button>
@@ -191,18 +222,19 @@
                             </div>
                         </div>
 
-                        <!-- 編輯模式 -->
+                        <!-- 2. 行程編輯：時間選單與自動排序 -->
                         <div v-else class="bg-white rounded-xl p-3 shadow-md border border-[#4B9CD3] animate-in fade-in">
                             <div class="space-y-2">
                                 <div class="flex gap-2">
-                                    <input v-model="tempEvent.time" class="w-1/3 bg-gray-50 border rounded px-2 py-1 text-xs" placeholder="時間">
+                                    <!-- 時間改為選單 -->
+                                    <select v-model="tempEvent.time" class="w-1/3 bg-gray-50 border rounded px-2 py-1 text-xs font-mono">
+                                        <option v-for="t in timeOptions" :key="t" :value="t">{{ t }}</option>
+                                    </select>
                                     <input v-model="tempEvent.title" class="w-2/3 bg-gray-50 border rounded px-2 py-1 text-xs font-bold" placeholder="標題">
                                 </div>
                                 <input v-model="tempEvent.sub" class="w-full bg-gray-50 border rounded px-2 py-1 text-xs" placeholder="地點/描述">
                                 <input v-model="tempEvent.mapUrl" class="w-full bg-gray-50 border rounded px-2 py-1 text-[10px]" placeholder="Google Maps 連結 (選填)">
-                                
-                                <!-- 網址編輯：修正為輸入框 -->
-                                <input v-model="tempEvent.link" class="w-full bg-gray-50 border rounded px-2 py-1 text-[10px]" placeholder="官方網站連結 (選填, 如 https://...)">
+                                <input v-model="tempEvent.link" class="w-full bg-gray-50 border rounded px-2 py-1 text-[10px]" placeholder="官方網站連結 (選填)">
                                 
                                 <div class="border-t border-gray-100 pt-2 mt-1">
                                     <label class="block text-[10px] font-bold text-gray-500 mb-1 flex items-center gap-1"><i data-lucide="image" class="w-3 h-3"></i> 上傳憑證 (圖片)</label>
@@ -228,7 +260,131 @@
             </div>
         </div>
 
-        <!-- VIEW: 記帳助手 (雲端同步) -->
+        <!-- NEW VIEW: 行程排序 (視覺化列表) -->
+        <div v-if="currentView === 'reorder'" class="h-full bg-[#FDFCF8] p-6 overflow-y-auto pb-safe">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <i data-lucide="arrow-up-down" class="w-6 h-6 text-[#4B9CD3]"></i> 調整行程順序
+                </h2>
+                <button @click="currentView = 'itinerary'" class="text-sm font-bold text-[#4B9CD3] bg-blue-50 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors">
+                    <i data-lucide="check" class="w-4 h-4 inline mr-1"></i>完成
+                </button>
+            </div>
+            
+            <p class="text-xs text-gray-400 mb-4 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                <i data-lucide="info" class="w-3 h-3 inline mr-1"></i> 上下移動卡片以交換行程，日期將會自動重新排序。
+            </p>
+
+            <div class="space-y-3 pb-20">
+                <div v-for="(day, index) in itinerary" :key="index" class="flex items-center gap-3 bg-white p-3 rounded-xl border border-gray-100 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+                    <!-- 左側：固定日期顯示 -->
+                    <div class="flex flex-col items-center justify-center w-14 flex-shrink-0 bg-gray-50 rounded-lg py-2 h-full">
+                        <span class="text-[10px] font-bold text-[#4B9CD3] uppercase tracking-wider">DAY</span>
+                        <span class="text-xl font-bold text-gray-700 leading-none my-0.5">{{ index + 1 }}</span>
+                        <span class="text-[9px] text-gray-400 font-mono">{{ day.shortDate }}</span>
+                    </div>
+                    
+                    <!-- 中間：行程內容 (會被移動的部分) -->
+                    <div class="flex-1 min-w-0 border-l border-gray-100 pl-3">
+                        <div class="flex items-center gap-2 mb-1">
+                            <h3 class="text-sm font-bold text-gray-800 truncate">{{ day.title }}</h3>
+                        </div>
+                        <p class="text-[10px] text-gray-500 truncate flex items-center gap-1">
+                            <i data-lucide="map-pin" class="w-3 h-3"></i> {{ day.location }}
+                        </p>
+                        <div class="flex gap-1 mt-1.5 overflow-x-auto no-scrollbar">
+                            <span v-for="tag in day.tags" :key="tag" class="text-[8px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded whitespace-nowrap">{{ tag }}</span>
+                        </div>
+                    </div>
+
+                    <!-- 右側：移動按鈕 -->
+                    <div class="flex flex-col gap-1 pl-1 border-l border-dashed border-gray-200">
+                        <button @click="moveDay(index, -1)" :disabled="index === 0" class="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-[#4B9CD3] disabled:opacity-20 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors">
+                            <i data-lucide="chevron-up" class="w-5 h-5"></i>
+                        </button>
+                        <button @click="moveDay(index, 1)" :disabled="index === itinerary.length - 1" class="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-[#4B9CD3] disabled:opacity-20 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors">
+                            <i data-lucide="chevron-down" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 3. VIEW: 緊急求助 (全新設計) -->
+        <div v-if="currentView === 'emergency'" class="h-full bg-[#2D2A29] p-6 overflow-y-auto pb-safe text-white">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center"><i data-lucide="siren" class="w-6 h-6 text-red-500"></i></div>
+                緊急求助
+            </h2>
+
+            <div class="space-y-4">
+                <!-- 警察 -->
+                <div class="bg-[#3E3A39] p-5 rounded-2xl flex items-center justify-between border border-white/5 shadow-lg">
+                    <div>
+                        <h3 class="text-xl font-bold text-red-400">警察局</h3>
+                        <p class="text-xs text-gray-400 mt-1">犯罪、事故、遺失物品</p>
+                    </div>
+                    <a href="tel:110" class="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-5 py-3 rounded-xl font-bold transition-all active:scale-95">
+                        <i data-lucide="phone" class="w-5 h-5"></i> 110
+                    </a>
+                </div>
+
+                <!-- 消防/救護 -->
+                <div class="bg-[#3E3A39] p-5 rounded-2xl flex items-center justify-between border border-white/5 shadow-lg">
+                    <div>
+                        <h3 class="text-xl font-bold text-orange-400">救護車 / 消防</h3>
+                        <p class="text-xs text-gray-400 mt-1">受傷、急病、火災</p>
+                    </div>
+                    <a href="tel:119" class="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-3 rounded-xl font-bold transition-all active:scale-95">
+                        <i data-lucide="phone" class="w-5 h-5"></i> 119
+                    </a>
+                </div>
+
+                <!-- 台灣辦事處 (可編輯) -->
+                <div class="bg-[#3E3A39] p-5 rounded-2xl border border-blue-500/30 shadow-lg relative overflow-hidden">
+                    <div class="absolute top-0 right-0 p-2 opacity-50 hover:opacity-100 cursor-pointer" @click="isEditingOffice = !isEditingOffice">
+                        <i data-lucide="settings-2" class="w-4 h-4 text-gray-400"></i>
+                    </div>
+                    
+                    <div v-if="!isEditingOffice">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-lg font-bold text-blue-400">{{ officeInfo.name }}</h3>
+                        </div>
+                        <p class="text-xs text-gray-300 leading-relaxed mb-4">{{ officeInfo.desc }}</p>
+                        <a :href="`tel:${officeInfo.phone}`" class="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition-all active:scale-95">
+                            <i data-lucide="phone" class="w-4 h-4"></i> 撥打 {{ officeInfo.phone }}
+                        </a>
+                    </div>
+                    <div v-else class="space-y-3 animate-in fade-in">
+                        <input v-model="officeInfo.name" class="w-full bg-black/30 border border-white/10 rounded px-3 py-2 text-sm text-white" placeholder="辦事處名稱">
+                        <input v-model="officeInfo.phone" class="w-full bg-black/30 border border-white/10 rounded px-3 py-2 text-sm text-white font-mono" placeholder="電話號碼">
+                        <textarea v-model="officeInfo.desc" class="w-full bg-black/30 border border-white/10 rounded px-3 py-2 text-xs text-white" rows="2" placeholder="備註 (如: 護照遺失...)"></textarea>
+                        <button @click="saveOfficeInfo" class="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-bold">儲存</button>
+                    </div>
+                </div>
+
+                <!-- 緊急聯絡人 (可編輯) -->
+                <div class="bg-[#3E3A39] p-5 rounded-2xl border border-yellow-500/30 shadow-lg mt-6">
+                    <div class="flex justify-between items-center mb-3">
+                        <h4 class="text-sm font-bold text-yellow-500 flex items-center gap-2"><i data-lucide="alert-triangle" class="w-4 h-4"></i> 緊急聯絡手機</h4>
+                        <button @click="isEditingContact = !isEditingContact" class="text-xs text-gray-500 hover:text-white underline">編輯</button>
+                    </div>
+                    
+                    <div v-if="!isEditingContact" class="text-center">
+                        <div class="text-2xl font-mono font-bold text-white mb-2">{{ emergencyContact }}</div>
+                        <a :href="`tel:${emergencyContact}`" class="inline-flex items-center gap-1 text-xs bg-white/10 px-3 py-1 rounded-full text-gray-300 hover:bg-white/20">
+                            <i data-lucide="phone-call" class="w-3 h-3"></i> 點擊撥打
+                        </a>
+                    </div>
+                    <div v-else class="flex gap-2">
+                        <input v-model="emergencyContact" class="flex-1 bg-black/30 border border-white/10 rounded px-3 py-2 text-sm text-white font-mono" placeholder="輸入號碼">
+                        <button @click="saveEmergencyContact" class="bg-yellow-600 text-white px-4 rounded-lg font-bold text-sm">儲存</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: 記帳助手 (保持不變) -->
         <div v-if="currentView === 'expense'" class="h-full bg-[#FDFCF8] p-6 overflow-y-auto pb-safe">
             <div class="flex justify-between items-center mb-1">
                 <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2"><i data-lucide="wallet" class="w-6 h-6 text-[#4B9CD3]"></i> 記帳助手</h2>
@@ -383,6 +539,24 @@
             const tempExpense = ref({});
             const isEditingTitle = ref(false);
             const tempTitle = ref({title: '', desc: ''});
+            
+            // 新增：日期編輯
+            const isEditingDate = ref(false);
+            const tempDateString = ref('');
+            
+            // 新增：地點/天氣編輯
+            const isEditingLocation = ref(false);
+            const tempLocation = ref({name: '', lat: 0, lon: 0});
+
+            // 新增：求助資訊
+            const isEditingOffice = ref(false);
+            const officeInfo = ref({
+                name: "台北駐大阪經濟文化辦事處", // 管轄名古屋
+                phone: "+81-6-6227-8623",
+                desc: "護照遺失、急難救助 (管轄愛知縣)"
+            });
+            const isEditingContact = ref(false);
+            const emergencyContact = ref("+886-912-345-678");
 
             // 憑證上傳相關
             const tempTicketFile = ref(null);
@@ -401,6 +575,14 @@
             const members = ref(['品萱1', '品萱2', '品萱3', 'OY1', 'OY2', 'OY3', 'OY4', 'RUBY1', 'RUBY2']);
             const expenses = ref([]);
             const newExpense = ref({ title: '', amount: '', payer: 'OY', currency: 'JPY', splitters: [...members.value] });
+            
+            // 新增：時間選單 (00:00 - 23:45)
+            const timeOptions = [];
+            for(let h=0; h<24; h++) {
+                for(let m=0; m<60; m+=15) {
+                    timeOptions.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+                }
+            }
 
             const myFirebaseConfig = {
                 apiKey: "AIzaSyDPsTLpK7VaGgJoZk3_Kmqzjia-rOR5fNY",
@@ -414,82 +596,79 @@
 
             const defaultItinerary = [
                 { 
-                    date: "1/7 (三)", shortDate: "1/7", title: "初見名古屋 & 購物日", 
+                    date: "1/7 (三)", shortDate: "1/7", title: "抵達名古屋購物日", 
                     desc: "抵達中部國際機場，市區購物，入住溫馨民宿。", location: "名古屋", lat: 35.1815, lon: 136.9066, tags: ["寶可夢", "HARBS", "鰻魚飯"],
-                    tips: "⚠️ 機場出發約 40-50 分鐘。\n🛍️ Parco 有寶可夢中心和 HARBS 蛋糕。\n🏠 民宿地址：Yonchōda-801-10 Shippōchō Akitake, Ama, Aichi\n🍽️ 晚餐：あつた蓬莱軒(鰻魚飯) 或 矢場味噌豬排。",
+                    tips: "✈️ 07:35 - 11:03 抵達中部國際機場\n🚐 12:30 機場出發 (約40-50分)\n📍 住宿：Yonchōda-801-10 Shippōchō Akitake, Ama, Aichi 497-0003日本\n🍽️ 午餐：あつた蓬莱軒(鰻魚飯) 或 矢場味噌豬排",
                     events: [
                         { id: 1, time: "07:35", title: "抵達機場", sub: "11:03 降落 NGO", link: "", ticket: false },
                         { id: 2, time: "12:30", title: "機場出發", sub: "包車前往市區", link: "", ticket: false },
-                        { id: 3, time: "13:20", title: "Nagoya PARCO", sub: "寶可夢/HARBS", link: "https://nagoya.parco.jp/", ticket: false },
-                        { id: 4, time: "16:30", title: "前往民宿", sub: "包車移動", link: "", ticket: false },
-                        { id: 5, time: "17:10", title: "民宿 Check-in", sub: "Ama, Aichi", mapUrl: "https://maps.google.com/?q=Yonchōda-801-10+Shippōchō+Akitake", link: "", ticket: false }
+                        { id: 3, time: "13:30", title: "Nagoya PARCO", sub: "寶可夢/HARBS", link: "https://nagoya.parco.jp/", ticket: false },
+                        { id: 4, time: "17:00", title: "前往民宿", sub: "Check-in (Ama)", link: "", ticket: false }
                     ]
                 },
                 { 
-                    date: "1/8 (四)", shortDate: "1/8", title: "龍貓與吉卜力的魔法", 
-                    desc: "吉卜力公園全日遊，進入夢幻動畫世界。", location: "長久手", lat: 35.1709, lon: 137.0867, tags: ["吉卜力", "龍貓", "親子"],
-                    tips: "🍃 吉卜力公園沒有遊樂設施，主要是場景還原。\n🍔 午餐：園區餐車或摩斯漢堡。\n🍽️ 晚餐：Steak House Asakuma (有自助吧，適合小孩)。",
+                    date: "1/8 (四)", shortDate: "1/8", title: "吉卜力公園", 
+                    desc: "吉卜力公園全日遊，進入夢幻動畫世界。", location: "長久手", lat: 35.1709, lon: 137.0867, tags: ["吉卜力", "親子"],
+                    tips: "🍃 吉卜力公園 (Ghibli Park)\n午餐：園區餐車\n🍽️ 晚餐：Steak House Asakuma (有自助吧，適合小孩)",
                     events: [
-                        { id: 6, time: "09:00", title: "民宿出發", sub: "前往吉卜力", link: "", ticket: false },
-                        { id: 7, time: "10:00", title: "吉卜力公園", sub: "Ghibli Park", link: "https://ghibli-park.jp/", ticket: false },
-                        { id: 8, time: "16:00", title: "返回市區", sub: "往餐廳移動", link: "", ticket: false },
-                        { id: 9, time: "17:00", title: "晚餐", sub: "Steak House Asakuma", link: "https://www.asakuma.co.jp/", ticket: false }
+                        { id: 5, time: "09:00", title: "民宿出發", sub: "前往吉卜力", link: "", ticket: false },
+                        { id: 6, time: "10:00", title: "吉卜力公園", sub: "Ghibli Park", link: "https://ghibli-park.jp/", ticket: false },
+                        { id: 7, time: "18:00", title: "晚餐", sub: "Steak House Asakuma", link: "https://www.asakuma.co.jp/", ticket: false }
                     ]
                 },
                 { 
-                    date: "1/9 (五)", shortDate: "1/9", title: "海洋世界 & 親子購物", 
+                    date: "1/9 (五)", shortDate: "1/9", title: "樂高樂園瘋玩日", 
+                    desc: "LEGOLAND Japan 全日暢玩。", location: "金城ふ頭", lat: 35.0507, lon: 136.8436, tags: ["樂高", "遊樂園"],
+                    tips: "🧱 日本樂高樂園(LEGOLAND Japan)\n午餐：樂園內解決",
+                    events: [
+                        { id: 8, time: "09:00", title: "民宿出發", sub: "前往樂高樂園", link: "", ticket: false },
+                        { id: 9, time: "10:00", title: "LEGOLAND", sub: "全日暢玩", link: "https://www.legoland.jp/", ticket: false }
+                    ]
+                },
+                { 
+                    date: "1/10 (六)", shortDate: "1/10", title: "海洋世界 & 親子購物", 
                     desc: "名古屋港水族館看虎鯨，下午 LaLaport 購物。", location: "名古屋港", lat: 35.0906, lon: 136.8781, tags: ["水族館", "虎鯨", "阿卡將"],
-                    tips: "🐬 必看海豚秀和虎鯨表演。\n🐟 午餐在漁港吃新鮮海鮮。\n🛍️ LaLaport 有阿卡將本舖(母嬰用品)和 Loft。",
+                    tips: "🐬 名古屋港水族館 (看海豚秀、虎鯨)\n🛍️ LaLaport NAGOYA minato AQULS (阿卡將、Loft)\n晚餐：商場內美食街",
                     events: [
                         { id: 10, time: "09:30", title: "民宿出發", sub: "前往水族館", link: "", ticket: false },
                         { id: 11, time: "10:10", title: "名古屋港水族館", sub: "海豚秀/虎鯨", link: "https://nagoyaaqua.jp/", ticket: false },
-                        { id: 12, time: "12:30", title: "午餐", sub: "漁港", link: "", ticket: false },
-                        { id: 13, time: "13:45", title: "LaLaport", sub: "購物/晚餐", link: "https://mitsui-shopping-park.com/lalaport/minatoaquls/", ticket: false }
-                    ]
-                },
-                { 
-                    date: "1/10 (六)", shortDate: "1/10", title: "樂高樂園瘋玩日", 
-                    desc: "LEGOLAND Japan 全日暢玩。", location: "金城ふ頭", lat: 35.0507, lon: 136.8436, tags: ["樂高", "遊樂園"],
-                    tips: "🧱 日本樂高樂園，適合 2-12 歲小孩。\n🍟 午餐在樂園內解決。",
-                    events: [
-                        { id: 14, time: "09:00", title: "民宿出發", sub: "前往樂高樂園", link: "", ticket: false },
-                        { id: 15, time: "09:30", title: "LEGOLAND", sub: "全日暢玩", link: "https://www.legoland.jp/", ticket: false },
-                        { id: 16, time: "18:00", title: "晚餐", sub: "市區或民宿附近", link: "", ticket: false }
+                        { id: 12, time: "13:00", title: "午餐", sub: "漁港", link: "", ticket: false },
+                        { id: 13, time: "14:30", title: "LaLaport", sub: "購物/晚餐", link: "https://mitsui-shopping-park.com/lalaport/minatoaquls/", ticket: false }
                     ]
                 },
                 { 
                     date: "1/11 (日)", shortDate: "1/11", title: "和服體驗 & 大須商店街", 
                     desc: "全家穿和服拍照，逛大須觀音與商店街。", location: "大須", lat: 35.1598, lon: 136.9019, tags: ["和服", "大須", "飛騨牛"],
-                    tips: "👘 10:00 Vasara 名古屋車站店換和服。\n📸 大須觀音有巨型招財貓，適合拍照。\n🥩 晚餐預約：飛騨牛一頭家 馬喰一代 WEST。",
+                    tips: "👘 名古屋 Vasara 和服體驗 (名古屋車站店)\n🏮 大須商店街 & 三輪神社 (巨型招財貓)\n🍽️ 晚餐：燒肉 馬喰一代 飛驒牛",
                     events: [
-                        { id: 17, time: "09:00", title: "民宿出發", sub: "前往 Vasara", link: "", ticket: false },
-                        { id: 18, time: "10:00", title: "和服體驗", sub: "Vasara 名古屋站", link: "https://vasara-h.co.jp/", ticket: false },
-                        { id: 19, time: "12:00", title: "大須商店街", sub: "逛街/午餐", link: "http://osu.co.jp/", ticket: false },
-                        { id: 20, time: "16:00", title: "歸還和服", sub: "車站採買", link: "", ticket: false },
-                        { id: 21, time: "18:00", title: "晚餐", sub: "馬喰一代 WEST", link: "https://bakuroichidai.jp/", ticket: false }
+                        { id: 14, time: "09:00", title: "民宿出發", sub: "前往 Vasara", link: "", ticket: false },
+                        { id: 15, time: "10:00", title: "和服體驗", sub: "Vasara 名古屋站", link: "https://vasara-h.co.jp/", ticket: false },
+                        { id: 16, time: "12:00", title: "大須商店街", sub: "三輪神社/逛街", link: "http://osu.co.jp/", ticket: false },
+                        { id: 17, time: "16:00", title: "車站採買", sub: "周邊購物", link: "", ticket: false },
+                        { id: 18, time: "18:00", title: "晚餐", sub: "馬喰一代 飛驒牛", link: "https://bakuroichidai.jp/", ticket: false }
                     ]
                 },
                 { 
                     date: "1/12 (一)", shortDate: "1/12", title: "快樂賦歸", 
                     desc: "前往機場，最後採買，準備搭機。", location: "中部機場", lat: 34.8588, lon: 136.8146, tags: ["蝦餅", "波音787"], 
-                    tips: "🚐 08:30 準時 Check-out 發車。\n✈️ 建議 09:30-10:00 抵達機場。\n🦐 4樓藍天城買蝦餅之里 (えびせんべいの里)。\n🛫 12:05 起飛。",
+                    tips: "🚐 08:30 準時 Check-out 發車\n✈️ 12:05 起飛 (建議 09:30 抵達)\n🛍️ 4樓藍天城：蝦餅之里\n✈️ FLIGHT OF DREAMS：看波音787",
                     events: [
-                        { id: 22, time: "08:30", title: "民宿 Check-out", sub: "準時發車", link: "", ticket: false },
-                        { id: 23, time: "09:30", title: "抵達機場", sub: "辦理登機", link: "https://www.centrair.jp/", ticket: false },
-                        { id: 24, time: "10:30", title: "機場巡禮", sub: "蝦餅/波音787", link: "", ticket: false },
-                        { id: 25, time: "12:05", title: "起飛", sub: "回溫暖的家", link: "", ticket: false }
+                        { id: 19, time: "08:30", title: "民宿 Check-out", sub: "準時發車", link: "", ticket: false },
+                        { id: 20, time: "09:30", title: "抵達機場", sub: "辦理登機", link: "https://www.centrair.jp/", ticket: false },
+                        { id: 21, time: "10:30", title: "機場巡禮", sub: "蝦餅/波音787", link: "", ticket: false },
+                        { id: 22, time: "12:05", title: "起飛", sub: "回溫暖的家", link: "", ticket: false }
                     ] 
                 }
             ];
             
             const itinerary = ref([...defaultItinerary]); 
+            const START_DATE_STR = '2026-01-07'; 
 
-            // Computed
             const currentDayData = computed(() => itinerary.value[activeDayIndex.value]);
             const totalRealJPY = computed(() => expenses.value.filter(e => e.currency === 'JPY').reduce((sum, e) => sum + Number(e.amount), 0));
             const totalRealTWD = computed(() => expenses.value.filter(e => e.currency === 'TWD').reduce((sum, e) => sum + Number(e.amount), 0));
             const grandTotalInTWD = computed(() => Math.round(totalRealTWD.value + totalRealJPY.value * exchangeRate.value));
-            const targetDate = new Date('2026-01-07');
+            const targetDate = new Date(START_DATE_STR);
             const daysRemaining = computed(() => { const today = new Date(); return Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24)); });
             const parsedTips = computed(() => marked.parse(currentDayData.value.tips || ''));
 
@@ -513,9 +692,13 @@
                                 });
                                 onSnapshot(doc(db, 'plans', collectionId), (docSnap) => {
                                     if (docSnap.exists()) {
-                                        itinerary.value = docSnap.data().days;
+                                        const data = docSnap.data();
+                                        if (data.days) itinerary.value = data.days;
+                                        // 載入求助設定 (如果有)
+                                        if (data.officeInfo) officeInfo.value = data.officeInfo;
+                                        if (data.emergencyContact) emergencyContact.value = data.emergencyContact;
                                     } else {
-                                        setDoc(doc(db, 'plans', collectionId), { days: defaultItinerary });
+                                        setDoc(doc(db, 'plans', collectionId), { days: defaultItinerary, officeInfo: officeInfo.value, emergencyContact: emergencyContact.value });
                                     }
                                 });
                             }
@@ -526,14 +709,26 @@
             
             const saveItinerary = () => {
                 if (dbConnected.value) {
-                    setDoc(doc(db, 'plans', collectionId), { days: itinerary.value });
+                    setDoc(doc(db, 'plans', collectionId), { 
+                        days: itinerary.value,
+                        officeInfo: officeInfo.value,
+                        emergencyContact: emergencyContact.value
+                    }, { merge: true });
                 }
             };
 
-            const switchDay = (i) => { currentView.value = 'itinerary'; activeDayIndex.value = i; isEditingTip.value = false; isEditingTitle.value = false; };
-            const getDayIcon = (i) => i === 0 || i === 5 ? 'plane' : (i === 1 || i === 4 ? 'camera' : (i === 3 ? 'gamepad-2' : 'map-pin'));
+            const switchDay = (i) => { 
+                currentView.value = 'itinerary'; 
+                activeDayIndex.value = i; 
+                isEditingTip.value = false; 
+                isEditingTitle.value = false;
+                isEditingDate.value = false; // reset
+                isEditingLocation.value = false; // reset
+            };
+            const getDayIcon = (i) => i === 0 || i === itinerary.value.length - 1 ? 'plane' : (i % 3 === 0 ? 'gamepad-2' : 'map-pin'); 
             const getWeatherIcon = (w) => w === 'snow' ? 'snowflake' : (w === 'sun' ? 'sun' : 'cloud');
             
+            // --- 標題編輯 ---
             const startEditTitle = () => { tempTitle.value = {title: currentDayData.value.title, desc: currentDayData.value.desc}; isEditingTitle.value = true; };
             const saveTitle = () => { 
                 itinerary.value[activeDayIndex.value].title = tempTitle.value.title; 
@@ -542,10 +737,92 @@
                 saveItinerary();
             };
 
+            // --- 日期編輯與自動連動 (修改後) ---
+            const startEditDate = () => {
+                tempDateString.value = currentDayData.value.date;
+                isEditingDate.value = true;
+            };
+            
+            const saveDate = () => {
+                const input = tempDateString.value;
+                // 嘗試解析日期，支援 "1/9", "01/09", "1-9" 等格式
+                const match = input.match(/(\d{1,2})[/-月](\d{1,2})/);
+                
+                if (match) {
+                    const month = parseInt(match[1]);
+                    const date = parseInt(match[2]);
+                    const year = 2026; // 固定年份
+                    const newDateObj = new Date(year, month - 1, date);
+                    
+                    // 從目前這一天開始，往後更新每一天
+                    for (let i = activeDayIndex.value; i < itinerary.value.length; i++) {
+                        const current = new Date(newDateObj);
+                        // 計算與目前這一天的天數差距，然後加回去
+                        current.setDate(newDateObj.getDate() + (i - activeDayIndex.value));
+                        
+                        const dayOfWeek = ['日', '一', '二', '三', '四', '五', '六'][current.getDay()];
+                        itinerary.value[i].date = `${current.getMonth() + 1}/${current.getDate()} (${dayOfWeek})`;
+                        itinerary.value[i].shortDate = `${current.getMonth() + 1}/${current.getDate()}`;
+                    }
+                } else {
+                    // 解析失敗，僅更新當前文字 (不連動)
+                    itinerary.value[activeDayIndex.value].date = input;
+                }
+                
+                isEditingDate.value = false;
+                saveItinerary();
+            };
+
+            // --- 地點/天氣編輯 ---
+            const startEditLocation = () => {
+                tempLocation.value = {
+                    name: currentDayData.value.location,
+                    lat: currentDayData.value.lat,
+                    lon: currentDayData.value.lon
+                };
+                isEditingLocation.value = true;
+            };
+            const saveLocation = () => {
+                itinerary.value[activeDayIndex.value].location = tempLocation.value.name;
+                itinerary.value[activeDayIndex.value].lat = parseFloat(tempLocation.value.lat);
+                itinerary.value[activeDayIndex.value].lon = parseFloat(tempLocation.value.lon);
+                isEditingLocation.value = false;
+                saveItinerary();
+                fetchRealTimeWeather(); // 立即更新天氣
+            };
+
+            // --- 求助資訊儲存 ---
+            const saveOfficeInfo = () => { isEditingOffice.value = false; saveItinerary(); };
+            const saveEmergencyContact = () => { isEditingContact.value = false; saveItinerary(); };
+
+            // --- 行程排序邏輯 (視覺化版) ---
+            const moveDay = (index, direction) => {
+                if (direction === -1 && index > 0) {
+                    // Move Up: Swap with previous
+                    [itinerary.value[index], itinerary.value[index-1]] = [itinerary.value[index-1], itinerary.value[index]];
+                    
+                    // 若當前顯示的是移動的那天，跟著移動索引
+                    if (activeDayIndex.value === index) activeDayIndex.value = index - 1;
+                    else if (activeDayIndex.value === index - 1) activeDayIndex.value = index;
+
+                } else if (direction === 1 && index < itinerary.value.length - 1) {
+                    // Move Down: Swap with next
+                    [itinerary.value[index], itinerary.value[index+1]] = [itinerary.value[index+1], itinerary.value[index]];
+                    
+                    // 若當前顯示的是移動的那天，跟著移動索引
+                    if (activeDayIndex.value === index) activeDayIndex.value = index + 1;
+                    else if (activeDayIndex.value === index + 1) activeDayIndex.value = index;
+                }
+                
+                // 排序後必須重算日期，保持日期連續性
+                recalculateDates();
+                saveItinerary();
+            };
+
+            // --- 行程編輯與排序 ---
             const startEditEvent = (e) => { editingEventId.value = e.id; tempEvent.value = {...e}; tempTicketFile.value = null; };
             const cancelEditEvent = () => { editingEventId.value = null; tempEvent.value = {}; tempTicketFile.value = null; };
             
-            // Image Compression
             const compressImage = (file) => {
                 return new Promise((resolve) => {
                     const reader = new FileReader();
@@ -554,13 +831,12 @@
                         img.onload = () => {
                             const canvas = document.createElement('canvas');
                             const ctx = canvas.getContext('2d');
-                            const maxWidth = 1024; // Limit width to 1024px
+                            const maxWidth = 1024; 
                             let width = img.width;
                             let height = img.height;
                             if (width > maxWidth) { height *= maxWidth / width; width = maxWidth; }
                             canvas.width = width; canvas.height = height;
                             ctx.drawImage(img, 0, 0, width, height);
-                            // Compress to JPEG 60%
                             resolve(canvas.toDataURL('image/jpeg', 0.6)); 
                         };
                         img.src = e.target.result;
@@ -583,18 +859,21 @@
             const saveEditEvent = async (idx) => { 
                 isUploading.value = true;
                 const eventId = String(tempEvent.value.id);
-                // 1. 如果有新上傳的圖片，存到 tickets_nagoya 集合
                 if (tempTicketFile.value && dbConnected.value) {
                     try {
                         await setDoc(doc(db, 'tickets_nagoya', eventId), { image: tempTicketFile.value });
-                        tempEvent.value.ticket = true; // 標記為有憑證
+                        tempEvent.value.ticket = true; 
                     } catch(e) {
                         alert("上傳失敗，請確認網路連線");
                     }
                 }
                 
-                // 2. 儲存行程資料
-                itinerary.value[activeDayIndex.value].events[idx] = {...tempEvent.value}; 
+                // 儲存資料
+                itinerary.value[activeDayIndex.value].events[idx] = {...tempEvent.value};
+                
+                // 自動排序 (時間格式為 HH:MM)
+                itinerary.value[activeDayIndex.value].events.sort((a, b) => a.time.localeCompare(b.time));
+
                 editingEventId.value = null; 
                 saveItinerary();
                 isUploading.value = false;
@@ -603,14 +882,8 @@
             const deleteTicketInEdit = async (idx) => {
                 if(confirm('確定刪除此憑證圖片嗎？')) {
                     if (dbConnected.value) {
-                        // 嘗試刪除文件，如果不存在也沒關係（可能是舊的假標記）
-                        try {
-                            await deleteDoc(doc(db, 'tickets_nagoya', String(tempEvent.value.id)));
-                        } catch(e) {
-                            console.log("Delete skipped or failed", e);
-                        }
+                        try { await deleteDoc(doc(db, 'tickets_nagoya', String(tempEvent.value.id))); } catch(e) {}
                     }
-                    // 無論雲端是否刪除成功，都強制更新本地狀態
                     tempEvent.value.ticket = false;
                     tempTicketFile.value = null;
                 }
@@ -624,7 +897,6 @@
                     if (snap.exists()) {
                         ticketImageUrl.value = snap.data().image;
                     } else {
-                        // Fallback: 如果資料庫沒圖但被標記為 true (可能是舊資料或沒上傳成功)
                         alert("找不到憑證圖片");
                         viewingTicket.value = false;
                     }
@@ -637,7 +909,10 @@
             const closeTicketViewer = () => { viewingTicket.value = false; ticketImageUrl.value = null; };
 
             const addNewEvent = () => {
+                // 預設給一個中午時間，新增後讓使用者去改
                 itinerary.value[activeDayIndex.value].events.push({ id: Date.now(), time: "12:00", title: "新行程", sub: "地點", link: "", ticket: false });
+                // 新增時也排序一下
+                itinerary.value[activeDayIndex.value].events.sort((a, b) => a.time.localeCompare(b.time));
                 saveItinerary();
             };
             const deleteEvent = async (idx) => { 
@@ -705,21 +980,45 @@
                 showSettlementModal.value = true;
             };
             
-            const addNewDay = () => {
-                const startDate = new Date('2026-01-07');
-                const nextDate = new Date(startDate);
-                nextDate.setDate(startDate.getDate() + itinerary.value.length);
-                const dayOfWeek = ['日', '一', '二', '三', '四', '五', '六'][nextDate.getDay()];
-                const formattedDate = `${nextDate.getMonth() + 1}/${nextDate.getDate()} (${dayOfWeek})`;
-                const shortDate = `${nextDate.getMonth() + 1}/${nextDate.getDate()}`;
-                itinerary.value.push({ date: formattedDate, shortDate: shortDate, title: "自由安排", desc: "新的一天", location: "待定", temp: 0, tempLow: 0, tempHigh: 0, weather: "sun", tags: [], tips: "點擊編輯填寫", events: [] });
-                saveItinerary();
-                switchDay(itinerary.value.length - 1);
+            const recalculateDates = () => {
+                const start = new Date(START_DATE_STR);
+                itinerary.value.forEach((day, index) => {
+                    const current = new Date(start);
+                    current.setDate(start.getDate() + index);
+                    const dayOfWeek = ['日', '一', '二', '三', '四', '五', '六'][current.getDay()];
+                    day.date = `${current.getMonth() + 1}/${current.getDate()} (${dayOfWeek})`;
+                    day.shortDate = `${current.getMonth() + 1}/${current.getDate()}`;
+                });
             };
-            const removeLastDay = () => { 
-                if (itinerary.value.length > 1 && confirm("刪除最後一天？")) {
-                    itinerary.value.pop();
-                    saveItinerary();
+
+            const insertDay = () => {
+                const newDay = {
+                    title: "新行程 (插入)", 
+                    desc: "請編輯行程內容", 
+                    location: "待定", 
+                    lat: 35.1815, lon: 136.9066, // Default Nagoya
+                    tags: [], 
+                    tips: "點擊編輯填寫", 
+                    events: []
+                };
+                itinerary.value.splice(activeDayIndex.value + 1, 0, newDay);
+                recalculateDates();
+                saveItinerary();
+                switchDay(activeDayIndex.value + 1);
+            };
+
+            const removeCurrentDay = () => { 
+                if (itinerary.value.length > 1) {
+                    if (confirm(`確定刪除 Day ${activeDayIndex.value + 1} 及其所有內容嗎？\n刪除後，後面的日期將會自動遞補。`)) {
+                        itinerary.value.splice(activeDayIndex.value, 1);
+                        if (activeDayIndex.value >= itinerary.value.length) {
+                            activeDayIndex.value = itinerary.value.length - 1;
+                        }
+                        recalculateDates();
+                        saveItinerary();
+                    }
+                } else {
+                    alert("至少需保留一天行程");
                 }
             };
             
@@ -728,7 +1027,8 @@
             const fetchRealTimeWeather = async () => {
                 const day = currentDayData.value;
                 if (!day.lat) { weatherState.value = { status: 'too_early', data: null }; return; }
-                const tripStartDate = new Date('2026-01-07'); const targetDayDate = new Date(tripStartDate); targetDayDate.setDate(tripStartDate.getDate() + activeDayIndex.value);
+                const tripStartDate = new Date(START_DATE_STR); 
+                const targetDayDate = new Date(tripStartDate); targetDayDate.setDate(tripStartDate.getDate() + activeDayIndex.value);
                 if (Math.ceil((targetDayDate - new Date()) / 86400000) > 14) { weatherState.value = { status: 'too_early', data: null }; return; }
                 weatherState.value = { status: 'loading', data: null };
                 const dateStr = targetDayDate.toISOString().split('T')[0];
@@ -746,7 +1046,7 @@
                 if (myFirebaseConfig.apiKey) initFirebase();
             });
             
-            watch([currentView, activeDayIndex, expenses.value, isEditingTip, editingEventId, viewingTicket, tempTicketFile], () => nextTick(() => lucide.createIcons()));
+            watch([currentView, activeDayIndex, expenses.value, isEditingTip, editingEventId, viewingTicket, tempTicketFile, isEditingDate, isEditingLocation, isEditingOffice, isEditingContact], () => nextTick(() => lucide.createIcons()));
 
             return {
                 currentView, activeDayIndex, itinerary, currentDayData, switchDay, getDayIcon, getWeatherIcon,
@@ -754,12 +1054,22 @@
                 totalRealJPY, totalRealTWD, grandTotalInTWD, exchangeRate, members, daysRemaining,
                 isEditingTip, tempTip, startEditTip, saveTip, parsedTips,
                 toggleSplitter, toggleAllSplitters, showSettlement: calculateSettlement, showSettlementModal, settlementStats, transfersJPY, transfersTWD,
-                weatherState, dbConnected, addNewDay, removeLastDay,
+                weatherState, dbConnected, 
+                insertDay, removeCurrentDay,
                 fetchExchangeRate, isRateLoading,
                 editingEventId, tempEvent, startEditEvent, saveEditEvent, cancelEditEvent, addNewEvent, deleteEvent,
                 isEditingTitle, tempTitle, startEditTitle, saveTitle,
                 // Ticket related
-                handleTicketUpload, isUploading, tempTicketFile, deleteTicketInEdit, openTicketViewer, closeTicketViewer, viewingTicket, ticketImageUrl
+                handleTicketUpload, isUploading, tempTicketFile, deleteTicketInEdit, openTicketViewer, closeTicketViewer, viewingTicket, ticketImageUrl,
+                // New features
+                isEditingDate, tempDateString, startEditDate, saveDate,
+                isEditingLocation, tempLocation, startEditLocation, saveLocation,
+                timeOptions,
+                // Emergency
+                isEditingOffice, officeInfo, saveOfficeInfo,
+                isEditingContact, emergencyContact, saveEmergencyContact,
+                // Reorder
+                moveDay
             };
         }
     }).mount('#app');
